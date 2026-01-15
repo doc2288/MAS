@@ -1,0 +1,19 @@
+{
+  "name": "mas",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:server": "npm --workspace apps/server run dev",
+    "dev:web": "npm --workspace apps/web run dev",
+    "dev:desktop": "npm --workspace apps/desktop run dev",
+    "dev:mobile": "npm --workspace apps/mobile run dev",
+    "build:server": "npm --workspace apps/server run build",
+    "build:web": "npm --workspace apps/web run build",
+    "build:desktop": "npm --workspace apps/desktop run build",
+    "build:mobile": "npm --workspace apps/mobile run build",
+    "typecheck": "npm --workspace apps/server run typecheck && npm --workspace apps/web run typecheck && npm --workspace apps/desktop run typecheck && npm --workspace apps/mobile run typecheck && npm --workspace packages/shared run typecheck"
+  }
+}

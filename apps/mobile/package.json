@@ -1,0 +1,25 @@
+{
+  "name": "@mas/mobile",
+  "private": true,
+  "main": "App.tsx",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "build": "expo export",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@mas/shared": "0.0.1",
+    "electron": "39.2.7",
+    "expo": "^54.0.31",
+    "react": "18.2.0",
+    "react-native": "^0.73.11",
+    "vite": "7.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.0",
+    "typescript": "^5.3.3"
+  }
+}
