@@ -165,7 +165,7 @@ app.post("/keys", (req, res) => {
     res.status(401).json({ error: "unauthorized" });
     return;
   }
-  const { publicKey } = req.body as { publicKey?: string };
+  const { publicKey, secretKey } = req.body as { publicKey?: string; secretKey?: string };
   if (!publicKey) {
     res.status(400).json({ error: "public_key_required" });
     return;
@@ -176,8 +176,30 @@ app.post("/keys", (req, res) => {
     return;
   }
   user.publicKey = publicKey;
+  if (secretKey) {
+    user.secretKey = secretKey;
+  }
   db.saveUser(user);
   res.json({ ok: true });
+});
+
+app.get("/keys/pair", (req, res) => {
+  const token = req.headers.authorization?.replace("Bearer ", "");
+  const userId = token ? verifyToken(token) : null;
+  if (!userId) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const user = db.findUserById(userId);
+  if (!user) {
+    res.status(404).json({ error: "not_found" });
+    return;
+  }
+  if (user.publicKey && user.secretKey) {
+    res.json({ publicKey: user.publicKey, secretKey: user.secretKey });
+  } else {
+    res.json({ publicKey: user.publicKey ?? null, secretKey: null });
+  }
 });
 
 app.get("/messages/:peerId", (req, res) => {
@@ -250,12 +272,6 @@ app.delete("/messages/:peerId", (req, res) => {
   const count = db.deleteConversation(userId, req.params.peerId);
   res.json({ ok: true, deleted: count });
 });
-
-// Clean orphaned messages on startup
-const orphaned = db.cleanOrphanedMessages();
-if (orphaned > 0) {
-  console.log(`Cleaned ${orphaned} orphaned message(s)`);
-}
 
 const port = Number(process.env.PORT || 4000);
 server.listen(port, () => {

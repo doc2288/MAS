@@ -311,19 +311,32 @@ export default function App() {
   useEffect(() => { fetchChats(); }, [fetchChats]);
 
   useEffect(() => {
-    if (!token || keys) return;
-    const pair = generateKeyPair();
-    localStorage.setItem("mas.keys", JSON.stringify(pair));
-    setKeys(pair);
-  }, [token, keys]);
-
-  useEffect(() => {
-    if (!token || !keys) return;
-    fetch(`${API_URL}/keys`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...authHeaders },
-      body: JSON.stringify({ publicKey: keys.publicKey })
-    }).catch(() => {});
+    if (!token) return;
+    if (keys) {
+      fetch(`${API_URL}/keys`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders },
+        body: JSON.stringify({ publicKey: keys.publicKey, secretKey: keys.secretKey })
+      }).catch(() => {});
+      return;
+    }
+    (async () => {
+      try {
+        const res = await fetch(`${API_URL}/keys/pair`, { headers: authHeaders });
+        if (res.ok) {
+          const saved = await res.json();
+          if (saved.publicKey && saved.secretKey) {
+            const restored = { publicKey: saved.publicKey, secretKey: saved.secretKey };
+            localStorage.setItem("mas.keys", JSON.stringify(restored));
+            setKeys(restored);
+            return;
+          }
+        }
+      } catch { /* ignore */ }
+      const pair = generateKeyPair();
+      localStorage.setItem("mas.keys", JSON.stringify(pair));
+      setKeys(pair);
+    })();
   }, [token, keys, authHeaders]);
 
   // WebSocket with auto-reconnect
@@ -528,6 +541,10 @@ export default function App() {
     await loadMessages(userToOpen.id);
   };
 
+  const tryDecrypt = (nonce: string, ct: string, pubKey: string, secKey: string): string | undefined => {
+    try { return decryptMessage(nonce, ct, pubKey, secKey) ?? undefined; } catch { return undefined; }
+  };
+
   const decryptIncoming = async (payload: any): Promise<UiMessage> => {
     const isMine = payload.from === user?.id;
     if (!keys) {
@@ -540,17 +557,25 @@ export default function App() {
     }
     let text: string | undefined;
     let decryptFailed = false;
-    const senderKey = payload.senderPublicKey ?? (isMine ? keys.publicKey : peer?.publicKey);
 
-    try {
-      if (isMine && payload.selfCiphertext && payload.selfNonce) {
-        text = decryptMessage(payload.selfNonce, payload.selfCiphertext, keys.publicKey, keys.secretKey) ?? undefined;
-      }
-      if (!text && payload.ciphertext && payload.nonce && senderKey) {
-        text = decryptMessage(payload.nonce, payload.ciphertext, senderKey, keys.secretKey) ?? undefined;
-      }
-    } catch {
-      text = undefined;
+    // Try self-encrypted copy first (works for own messages regardless of peer key changes)
+    if (payload.selfCiphertext && payload.selfNonce) {
+      text = tryDecrypt(payload.selfNonce, payload.selfCiphertext, keys.publicKey, keys.secretKey);
+    }
+
+    // Try peer-encrypted copy with senderPublicKey
+    if (!text && payload.ciphertext && payload.nonce && payload.senderPublicKey) {
+      text = tryDecrypt(payload.nonce, payload.ciphertext, payload.senderPublicKey, keys.secretKey);
+    }
+
+    // Try peer-encrypted copy with peer's current publicKey
+    if (!text && payload.ciphertext && payload.nonce && peer?.publicKey) {
+      text = tryDecrypt(payload.nonce, payload.ciphertext, peer.publicKey, keys.secretKey);
+    }
+
+    // Try peer-encrypted copy with own publicKey (in case the message was to ourselves)
+    if (!text && payload.ciphertext && payload.nonce) {
+      text = tryDecrypt(payload.nonce, payload.ciphertext, keys.publicKey, keys.secretKey);
     }
 
     if (!text && payload.contentType === "text") {

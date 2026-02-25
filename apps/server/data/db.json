@@ -5,7 +5,12 @@
       "phone": "+12025559999",
       "createdAt": "2026-02-25T16:02:22.393Z",
       "login": "testuser2",
-      "publicKey": "Voh2VWsgBuXgq0fzq/04ANSf5YgdIFe8lcZRGsL5lmg="
+      "publicKey": "dQSK6GUQUDB8S/mN9OXGVO5tAGdbfcpOaZTp4UviXHI="
+    },
+    {
+      "id": "147ad289-0547-4c1f-9a2b-e61f1c5c6e11",
+      "phone": "+12025551234",
+      "createdAt": "2026-02-25T20:54:08.392Z"
     }
   ],
   "messages": []

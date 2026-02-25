@@ -6,6 +6,7 @@ export type UserRecord = {
   phone: string;
   login?: string;
   publicKey?: string;
+  secretKey?: string;
   status?: string;
   createdAt: string;
 };
