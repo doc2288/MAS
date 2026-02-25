@@ -19,6 +19,20 @@
       "createdAt": "2026-01-15T11:46:26.313Z",
       "publicKey": "ZbYaux27Togs1ez6bE3DbMJf/UCRwvyL86Fkzi2HkFc=",
       "login": "doc_228"
+    },
+    {
+      "id": "c8c374df-c352-40a1-93f4-5421f90f61ae",
+      "phone": "+12025551234",
+      "createdAt": "2026-02-25T13:57:44.283Z",
+      "publicKey": "ttZrTFphDuAaeAYFKVo4bUy1fq1nLAz+nw7gg6Joxhw=",
+      "login": "testuser1"
+    },
+    {
+      "id": "89abfe28-0d5e-480b-8fc2-a3ead765de22",
+      "phone": "+12025559999",
+      "createdAt": "2026-02-25T14:21:46.109Z",
+      "login": "testuser2",
+      "publicKey": "FakePublicKeyForTestingPurposesOnly123456=="
     }
   ],
   "messages": [

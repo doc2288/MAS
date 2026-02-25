@@ -1,6 +1,6 @@
 import { WebSocketServer } from "ws";
-import { verifyToken } from "./auth";
-import { db } from "./store";
+import { verifyToken } from "./auth.js";
+import { db } from "./store.js";
 
 export type SocketClient = {
   userId: string;
@@ -8,14 +8,21 @@ export type SocketClient = {
 };
 
 const clients = new Map<string, SocketClient>();
+const onlineUsers = new Map<string, string>(); // userId -> lastSeen ISO
+
+const safeSend = (socket: import("ws").WebSocket, data: string) => {
+  if (socket.readyState === socket.OPEN) {
+    socket.send(data);
+  }
+};
 
 const broadcastPresence = (userId: string, isOnline: boolean) => {
   const payload = JSON.stringify({
     type: "presence",
-    payload: { userId, isOnline }
+    payload: { userId, isOnline, lastSeen: onlineUsers.get(userId) }
   });
   for (const client of clients.values()) {
-    client.socket.send(payload);
+    safeSend(client.socket, payload);
   }
 };
 
@@ -31,12 +38,20 @@ export const attachWebSocket = (server: import("http").Server) => {
       return;
     }
 
+    const prev = clients.get(userId);
+    if (prev && prev.socket !== socket && prev.socket.readyState === prev.socket.OPEN) {
+      prev.socket.close();
+    }
+
     clients.set(userId, { userId, socket });
+    onlineUsers.set(userId, new Date().toISOString());
     broadcastPresence(userId, true);
 
     socket.on("message", (raw) => {
       try {
         const { type, payload } = JSON.parse(raw.toString());
+        if (!type || !payload) return;
+
         if (type === "message.send") {
           const deliveredAt = clients.get(payload.to)
             ? new Date().toISOString()
@@ -49,18 +64,44 @@ export const attachWebSocket = (server: import("http").Server) => {
           db.saveMessage(message);
           const target = clients.get(payload.to);
           if (target) {
-            target.socket.send(
+            safeSend(
+              target.socket,
               JSON.stringify({ type: "message.receive", payload: message })
             );
           }
           if (deliveredAt) {
             const sender = clients.get(userId);
             if (sender) {
-              sender.socket.send(
+              safeSend(
+                sender.socket,
                 JSON.stringify({
                   type: "message.delivered",
                   payload: { id: payload.id, deliveredAt }
                 })
+              );
+            }
+          }
+        }
+
+        if (type === "typing") {
+          const target = clients.get(payload.to);
+          if (target) {
+            safeSend(
+              target.socket,
+              JSON.stringify({ type: "typing", payload: { from: userId } })
+            );
+          }
+        }
+
+        if (type === "message.delete") {
+          const msgId = payload.id as string;
+          if (msgId) {
+            db.deleteMessage(msgId, userId);
+            const target = clients.get(payload.peerId);
+            if (target) {
+              safeSend(
+                target.socket,
+                JSON.stringify({ type: "message.deleted", payload: { id: msgId, from: userId } })
               );
             }
           }
@@ -74,7 +115,8 @@ export const attachWebSocket = (server: import("http").Server) => {
         ) {
           const target = clients.get(payload.to);
           if (target) {
-            target.socket.send(
+            safeSend(
+              target.socket,
               JSON.stringify({ type, payload: { ...payload, from: userId } })
             );
           }
@@ -94,7 +136,8 @@ export const attachWebSocket = (server: import("http").Server) => {
             db.updateMessages(ids, { readAt, deliveredAt: readAt });
             const target = clients.get(payload.peerId);
             if (target) {
-              target.socket.send(
+              safeSend(
+                target.socket,
                 JSON.stringify({
                   type: "message.read",
                   payload: { ids, readAt }
@@ -109,8 +152,12 @@ export const attachWebSocket = (server: import("http").Server) => {
     });
 
     socket.on("close", () => {
-      clients.delete(userId);
-      broadcastPresence(userId, false);
+      const current = clients.get(userId);
+      if (current && current.socket === socket) {
+        clients.delete(userId);
+        onlineUsers.set(userId, new Date().toISOString());
+        broadcastPresence(userId, false);
+      }
     });
   });
 };

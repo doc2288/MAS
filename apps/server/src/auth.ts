@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import jwt from "jsonwebtoken";
-import { db, UserRecord } from "./store";
+import { db, UserRecord } from "./store.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret";
 const codeTTL = 5 * 60 * 1000;
@@ -12,6 +12,13 @@ type PendingCode = {
 };
 
 const pendingCodes = new Map<string, PendingCode>();
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [phone, entry] of pendingCodes) {
+    if (entry.expiresAt < now) pendingCodes.delete(phone);
+  }
+}, 60_000);
 
 export const requestSmsCode = (phone: string) => {
   const code = Math.floor(100000 + Math.random() * 900000).toString();

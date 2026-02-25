@@ -121,5 +121,17 @@ export const db = {
     return readDb().messages.filter(
       (msg) => msg.from === userId || msg.to === userId
     );
+  },
+  deleteMessage(id: string, userId: string) {
+    const data = readDb();
+    const idx = data.messages.findIndex(
+      (msg) => msg.id === id && (msg.from === userId || msg.to === userId)
+    );
+    if (idx >= 0) {
+      data.messages.splice(idx, 1);
+      writeDb(data);
+      return true;
+    }
+    return false;
   }
 };

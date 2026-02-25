@@ -5,9 +5,9 @@ import fs from "node:fs";
 import express from "express";
 import cors from "cors";
 import multer from "multer";
-import { attachWebSocket } from "./ws";
-import { db } from "./store";
-import { requestSmsCode, verifySmsCode, verifyToken } from "./auth";
+import { attachWebSocket } from "./ws.js";
+import { db } from "./store.js";
+import { requestSmsCode, verifySmsCode, verifyToken } from "./auth.js";
 
 const app = express();
 const server = http.createServer(app);
@@ -109,11 +109,11 @@ app.get("/users/search", (req, res) => {
   }
   const users = db.searchUsersByLoginPrefix(normalized, userId);
   res.json(
-    users.map((user) => ({
-      id: user.id,
-      phone: user.phone,
-      login: user.login,
-      publicKey: user.publicKey
+    users.map((u) => ({
+      id: u.id,
+      phone: u.phone,
+      login: u.login,
+      publicKey: u.publicKey
     }))
   );
 });
