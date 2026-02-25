@@ -46,6 +46,14 @@ export const verifySmsCode = (phone: string, code: string) => {
       createdAt: new Date().toISOString()
     } satisfies UserRecord;
     db.saveUser(user);
+
+    const orphanedIds = db.findOrphanedUserIds();
+    for (const oldId of orphanedIds) {
+      const migrated = db.migrateMessages(oldId, user.id);
+      if (migrated > 0) {
+        console.log(`Migrated ${migrated} message(s) from orphaned user ${oldId} to ${user.id}`);
+      }
+    }
   }
 
   const token = jwt.sign({ sub: user.id }, JWT_SECRET, { expiresIn: "7d" });

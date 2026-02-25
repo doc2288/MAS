@@ -149,6 +149,30 @@ export const db = {
     }
     return 0;
   },
+  migrateMessages(oldUserId: string, newUserId: string) {
+    const data = readDb();
+    let migrated = 0;
+    data.messages = data.messages.map((msg) => {
+      let changed = false;
+      const patched = { ...msg };
+      if (msg.from === oldUserId) { patched.from = newUserId; changed = true; }
+      if (msg.to === oldUserId) { patched.to = newUserId; changed = true; }
+      if (changed) migrated++;
+      return patched;
+    });
+    if (migrated > 0) writeDb(data);
+    return migrated;
+  },
+  findOrphanedUserIds() {
+    const data = readDb();
+    const userIds = new Set(data.users.map((u) => u.id));
+    const orphaned = new Set<string>();
+    for (const msg of data.messages) {
+      if (!userIds.has(msg.from)) orphaned.add(msg.from);
+      if (!userIds.has(msg.to)) orphaned.add(msg.to);
+    }
+    return Array.from(orphaned);
+  },
   cleanOrphanedMessages() {
     const data = readDb();
     const userIds = new Set(data.users.map((u) => u.id));

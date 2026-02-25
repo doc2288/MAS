@@ -1,17 +1,45 @@
 {
   "users": [
     {
-      "id": "25d5478f-7d75-40e3-bfd5-1c62c87284f5",
+      "id": "35c4e3a6-f4b5-47b7-9f17-8219a44044d5",
       "phone": "+12025559999",
-      "createdAt": "2026-02-25T16:02:22.393Z",
+      "createdAt": "2026-02-25T21:08:01.484Z",
       "login": "testuser2",
-      "publicKey": "dQSK6GUQUDB8S/mN9OXGVO5tAGdbfcpOaZTp4UviXHI="
+      "publicKey": "vHX+Bk5pmNfe7C7x1zjbpasy3Axa8v01tCMWJ4cy2lQ=",
+      "secretKey": "gKVf8aUS7PanGOkJUaJTr+5dSDVNtvJuo8BsR7l1krw="
     },
     {
-      "id": "147ad289-0547-4c1f-9a2b-e61f1c5c6e11",
+      "id": "0c5d5b06-3c95-415e-a000-2edf67c72e4d",
       "phone": "+12025551234",
-      "createdAt": "2026-02-25T20:54:08.392Z"
+      "createdAt": "2026-02-25T21:13:16.279Z",
+      "publicKey": "a2vNefkZTZVaftD/uekVLFw/U1tdFY+3zjpT1E+bqyE=",
+      "secretKey": "R1lwjUhf+MoPHZeQ4+zv9/7dVJ8uycGeUIa8VuP7wCo="
     }
   ],
-  "messages": []
+  "messages": [
+    {
+      "id": "64c7b839-0181-4409-8d42-547b9e673710",
+      "to": "35c4e3a6-f4b5-47b7-9f17-8219a44044d5",
+      "createdAt": "2026-02-25T21:10:56.051Z",
+      "contentType": "text",
+      "nonce": "S1SP4C8hqKpmf/souByEi/bV+ereGb+t",
+      "ciphertext": "0rLtel9fbdpBt/hjdtWnPdJIIffLs6A3or94akE7tT2QTxQoZzzcnk1P2QtHfqVRnM3g3cWFv7mlEdsN9tLcEHVSjw5qcU5tdp9hhCGUkzPSOqh5",
+      "senderPublicKey": "ttZrTFphDuAaeAYFKVo4bUy1fq1nLAz+nw7gg6Joxhw=",
+      "selfNonce": "nL9MVuuD4mczRls9gpxIo/Fa7PVbCqV1",
+      "selfCiphertext": "PFTTdoj3Nnqalp/58qS1Z1zuSDlpExwBl0xeteVxlM8tbgooLmJ/qja/PCqiThjHvRGxae7mltvlidyP0vwjJsrGTTW+sc7d5EvxkP8k+jxkQiju",
+      "from": "c8c374df-c352-40a1-93f4-5421f90f61ae"
+    },
+    {
+      "id": "fba5ad4c-8d55-4c75-a24b-706441e41c8f",
+      "to": "35c4e3a6-f4b5-47b7-9f17-8219a44044d5",
+      "createdAt": "2026-02-25T21:11:11.869Z",
+      "contentType": "text",
+      "nonce": "58JNmT5LHQr/jlqj0G4cBWSx2NlvfXXw",
+      "ciphertext": "Ftk73EExpkGNj5o2PYd+mTqFA8sqXluV4bW4sMrxE1V9g06M5OaVhtllj+GysP3372mAm1ujJJPGJ1/DV+1H/OaBfkbnwwsY2Boqv5F9sw==",
+      "senderPublicKey": "ttZrTFphDuAaeAYFKVo4bUy1fq1nLAz+nw7gg6Joxhw=",
+      "selfNonce": "njy7nTfANgjRsmYf49TZ/5WSC+UitCAD",
+      "selfCiphertext": "kuJGBi1zckf2wv0J9E/4gyH6kTYQT3q5g0k2tNgmdvqiPYKduKkydVQ9G3gazw8jldgLMG+lZ7XNIDRst3zunYNyPhRvowp7+tm9MOOGkg==",
+      "from": "c8c374df-c352-40a1-93f4-5421f90f61ae"
+    }
+  ]
 }

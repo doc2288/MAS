@@ -300,8 +300,16 @@ export default function App() {
   useEffect(() => {
     if (!token) return;
     fetch(`${API_URL}/users/me`, { headers: authHeaders })
-      .then((res) => res.json())
+      .then((res) => {
+        if (res.status === 401) {
+          localStorage.removeItem("mas.token");
+          setToken(null);
+          return null;
+        }
+        return res.json();
+      })
       .then((data) => {
+        if (!data) return;
         setUser(data);
         if (data?.login) setLoginValue(data.login);
       })

@@ -58,6 +58,10 @@ app.get("/users/me", (req, res) => {
     return;
   }
   const user = db.findUserById(userId);
+  if (!user) {
+    res.status(401).json({ error: "user_not_found" });
+    return;
+  }
   res.json(user);
 });
 
