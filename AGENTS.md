@@ -18,3 +18,5 @@
 - **Typecheck:** `npm run typecheck` has pre-existing errors in `apps/server` due to `NodeNext` moduleResolution requiring `.js` extensions in imports and a missing `@types/cors` dev dependency. The server still runs fine via `tsx`.
 - **Build:** `npm run build:web` succeeds cleanly.
 - **Web client hardcodes** `API_URL = "http://localhost:4000"` and `WS_URL = "ws://localhost:4000"` in `apps/web/src/App.tsx`. Start the server before the web client.
+- **WebSocket + StrictMode bug:** `React.StrictMode` in `apps/web/src/main.tsx` causes the WebSocket `useEffect` (in `App.tsx`) to double-mount, creating a race: the stale socket's `close` event fires `clients.delete(userId)` on the server after the new socket has already registered, making the user appear offline. This blocks incoming call delivery and real-time presence in dev mode.
+- **Call testing in VM:** `startCall`/`acceptCall` call `navigator.mediaDevices.getUserMedia()` without try/catch. In headless/VM environments without audio/video hardware, calls fail silently. Server-side call signaling (offer/answer/ICE/end relay) can be tested programmatically via WebSocket clients.
