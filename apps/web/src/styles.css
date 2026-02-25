@@ -383,7 +383,10 @@ button:active { transform: scale(0.98); }
   border-color: var(--border-hover);
 }
 .gear svg, .phone-btn svg, .video-btn svg {
-  width: 18px; height: 18px; fill: var(--text-secondary);
+  width: 18px; height: 18px; fill: var(--text-secondary); stroke: none;
+}
+.gear svg[aria-hidden] path[stroke] {
+  fill: none; stroke: var(--text-secondary);
 }
 
 .call-actions { display: flex; align-items: center; gap: 6px; }
@@ -610,6 +613,31 @@ button:active { transform: scale(0.98); }
   stroke: var(--text-secondary);
   fill: none; stroke-width: 2;
   stroke-linecap: round; stroke-linejoin: round;
+}
+
+.message.decrypt-failed {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.2);
+  opacity: 0.7;
+}
+
+.decrypt-failed-content {
+  display: flex; align-items: center;
+  gap: 10px; justify-content: space-between;
+}
+
+.decrypt-delete-btn {
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+  font-size: 12px; font-weight: 500;
+  cursor: pointer; flex-shrink: 0;
+  transition: background 0.15s;
+}
+.decrypt-delete-btn:hover {
+  background: rgba(239, 68, 68, 0.25);
 }
 
 .file-btn {

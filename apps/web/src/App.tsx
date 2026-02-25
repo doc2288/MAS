@@ -529,26 +529,35 @@ export default function App() {
   };
 
   const decryptIncoming = async (payload: any): Promise<UiMessage> => {
+    const isMine = payload.from === user?.id;
     if (!keys) {
       return {
         id: payload.id, from: payload.from, to: payload.to,
         createdAt: payload.createdAt, contentType: payload.contentType,
-        text: "Немає ключів", meta: payload.meta,
-        isMine: payload.from === user?.id
+        text: "🔒 Немає ключів шифрування", meta: { ...payload.meta, decryptFailed: "true" },
+        isMine
       };
     }
     let text: string | undefined;
-    const isMine = payload.from === user?.id;
+    let decryptFailed = false;
     const senderKey = payload.senderPublicKey ?? (isMine ? keys.publicKey : peer?.publicKey);
-    if (isMine && payload.selfCiphertext && payload.selfNonce) {
-      text = decryptMessage(payload.selfNonce, payload.selfCiphertext, keys.publicKey, keys.secretKey)
-        ?? "Неможливо розшифрувати";
-    } else if (payload.ciphertext && payload.nonce && senderKey) {
-      text = decryptMessage(payload.nonce, payload.ciphertext, senderKey, keys.secretKey)
-        ?? "Неможливо розшифрувати";
-    } else if (payload.contentType === "text") {
-      text = "Неможливо розшифрувати";
+
+    try {
+      if (isMine && payload.selfCiphertext && payload.selfNonce) {
+        text = decryptMessage(payload.selfNonce, payload.selfCiphertext, keys.publicKey, keys.secretKey) ?? undefined;
+      }
+      if (!text && payload.ciphertext && payload.nonce && senderKey) {
+        text = decryptMessage(payload.nonce, payload.ciphertext, senderKey, keys.secretKey) ?? undefined;
+      }
+    } catch {
+      text = undefined;
     }
+
+    if (!text && payload.contentType === "text") {
+      text = "🔒 Повідомлення зашифроване іншим ключем";
+      decryptFailed = true;
+    }
+
     const msgStatus = isMine
       ? payload.readAt ? "read" : payload.deliveredAt ? "delivered" : "sent"
       : undefined;
@@ -556,8 +565,8 @@ export default function App() {
       id: payload.id, from: payload.from, to: payload.to,
       createdAt: payload.createdAt, contentType: payload.contentType,
       text, meta: payload.meta
-        ? { ...payload.meta, senderPublicKey: payload.senderPublicKey }
-        : { senderPublicKey: payload.senderPublicKey },
+        ? { ...payload.meta, senderPublicKey: payload.senderPublicKey, ...(decryptFailed ? { decryptFailed: "true" } : {}) }
+        : { senderPublicKey: payload.senderPublicKey, ...(decryptFailed ? { decryptFailed: "true" } : {}) },
       isMine, status: msgStatus as UiMessage["status"]
     };
   };
@@ -640,6 +649,19 @@ export default function App() {
       payload: { id: msgId, peerId: peer.id }
     }));
     setMessages((prev) => prev.filter((m) => m.id !== msgId));
+  };
+
+  const clearChat = async () => {
+    if (!peer || !token) return;
+    if (!confirm("Видалити всі повідомлення з цим контактом?")) return;
+    try {
+      await fetch(`${API_URL}/messages/${peer.id}`, {
+        method: "DELETE", headers: authHeaders
+      });
+      setMessages([]);
+      fetchChats();
+      setStatus("Чат очищено.");
+    } catch { setStatus("Помилка очищення чату."); }
   };
 
   const handleFile = async (file: File | null) => {
@@ -1028,6 +1050,11 @@ export default function App() {
           </div>
           {activeTab === "chat" && peer && (
             <div className="call-actions">
+              <button className="gear" onClick={clearChat} aria-label="Очистити чат" title="Очистити чат">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
               <button className="video-btn" onClick={() => startCall(true)} aria-label="Відеодзвінок">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M15 8a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h10zm7.5 2.5-3.5 2v-3l3.5 2z"/>
@@ -1052,11 +1079,19 @@ export default function App() {
                   return (
                     <React.Fragment key={msg.id}>
                       {showDate && <div className="date-separator"><span>{formatDate(msg.createdAt)}</span></div>}
-                      <div className={`message ${msg.isMine ? "out" : "in"}`}
+                      <div className={`message ${msg.isMine ? "out" : "in"} ${msg.meta?.decryptFailed ? "decrypt-failed" : ""}`}
                         onContextMenu={(e) => {
-                          if (msg.isMine) { e.preventDefault(); if (confirm("Видалити повідомлення?")) deleteMessage(msg.id); }
+                          if (msg.isMine || msg.meta?.decryptFailed) {
+                            e.preventDefault();
+                            if (confirm("Видалити повідомлення?")) deleteMessage(msg.id);
+                          }
                         }}>
-                        {msg.contentType === "file" && msg.meta ? (
+                        {msg.meta?.decryptFailed ? (
+                          <div className="decrypt-failed-content">
+                            <span className="message-text">{msg.text}</span>
+                            <button className="decrypt-delete-btn" onClick={() => deleteMessage(msg.id)}>Видалити</button>
+                          </div>
+                        ) : msg.contentType === "file" && msg.meta ? (
                           <button className="file-btn" onClick={() => decryptFile(msg)}>
                             📎 {msg.meta.fileName}
                           </button>
@@ -1069,7 +1104,7 @@ export default function App() {
                         )}
                         <div className="message-meta">
                           <span className="message-time">{formatTime(msg.createdAt)}</span>
-                          {msg.isMine && (
+                          {msg.isMine && !msg.meta?.decryptFailed && (
                             <span className={`message-status ${msg.status ?? "sent"}`}>
                               {msg.status === "read" ? "✓✓" : msg.status === "delivered" ? "✓✓" : "✓"}
                             </span>

@@ -8,42 +8,5 @@
       "publicKey": "Voh2VWsgBuXgq0fzq/04ANSf5YgdIFe8lcZRGsL5lmg="
     }
   ],
-  "messages": [
-    {
-      "id": "7bcadd25-1f7d-4c1b-8627-3b90c4feafce",
-      "to": "25d5478f-7d75-40e3-bfd5-1c62c87284f5",
-      "createdAt": "2026-02-25T16:16:22.458Z",
-      "contentType": "text",
-      "nonce": "N+ICFFwaDAlSsFhOTsdIv64cqLT1158Q",
-      "ciphertext": "2ulZFHs69FKZ5UnW/CHpf+er7ERES1dB9i8P9F2SkgfWpw==",
-      "senderPublicKey": "ttZrTFphDuAaeAYFKVo4bUy1fq1nLAz+nw7gg6Joxhw=",
-      "selfNonce": "Q+J5IxeY2QfTe1/nNaTWRXsqon0h+/A7",
-      "selfCiphertext": "RIHYGQ5ONcp+QaTzrKbrltk8hQ4SxCw7yCdNFY2bk+eRlA==",
-      "from": "c8c374df-c352-40a1-93f4-5421f90f61ae"
-    },
-    {
-      "id": "1ce1ec81-9e42-44ec-b09f-241003203510",
-      "to": "25d5478f-7d75-40e3-bfd5-1c62c87284f5",
-      "createdAt": "2026-02-25T16:17:26.249Z",
-      "contentType": "text",
-      "nonce": "195bZKWF23Dd1WJd1nb9tgopzX6RGNhU",
-      "ciphertext": "md8nC9XCEClhrbOQkkZZRHTW3V2f/w==",
-      "senderPublicKey": "ttZrTFphDuAaeAYFKVo4bUy1fq1nLAz+nw7gg6Joxhw=",
-      "selfNonce": "luv0IxJFNBEy07WvGYofoOu+zl3gSkDw",
-      "selfCiphertext": "yXLHvU2H1g4WjG1i8BoCmI92e6A/QQ==",
-      "from": "c8c374df-c352-40a1-93f4-5421f90f61ae"
-    },
-    {
-      "id": "31f0c283-1954-4ca8-a8a6-1b2c4e2d40d8",
-      "to": "25d5478f-7d75-40e3-bfd5-1c62c87284f5",
-      "createdAt": "2026-02-25T20:12:05.001Z",
-      "contentType": "text",
-      "nonce": "ps0hTU5I/WB+Ksc3XTDHXpTOUYYhCaoi",
-      "ciphertext": "UdTlD5e2agO/HnWR5kboggyXVw==",
-      "senderPublicKey": "ttZrTFphDuAaeAYFKVo4bUy1fq1nLAz+nw7gg6Joxhw=",
-      "selfNonce": "8L+aA/rQG3VoM7ooUGxoD7loiYpwDoPr",
-      "selfCiphertext": "bvdpnrKUd+sBXmkSJS8OasJdnA==",
-      "from": "c8c374df-c352-40a1-93f4-5421f90f61ae"
-    }
-  ]
+  "messages": []
 }

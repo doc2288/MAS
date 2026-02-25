@@ -240,6 +240,23 @@ app.post("/files", upload.single("file"), (req, res) => {
   res.json({ fileId, url });
 });
 
+app.delete("/messages/:peerId", (req, res) => {
+  const token = req.headers.authorization?.replace("Bearer ", "");
+  const userId = token ? verifyToken(token) : null;
+  if (!userId) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const count = db.deleteConversation(userId, req.params.peerId);
+  res.json({ ok: true, deleted: count });
+});
+
+// Clean orphaned messages on startup
+const orphaned = db.cleanOrphanedMessages();
+if (orphaned > 0) {
+  console.log(`Cleaned ${orphaned} orphaned message(s)`);
+}
+
 const port = Number(process.env.PORT || 4000);
 server.listen(port, () => {
   console.log(`MAS server listening on http://localhost:${port}`);

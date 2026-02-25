@@ -133,5 +133,31 @@ export const db = {
       return true;
     }
     return false;
+  },
+  deleteConversation(userId: string, peerId: string) {
+    const data = readDb();
+    const before = data.messages.length;
+    data.messages = data.messages.filter(
+      (msg) =>
+        !((msg.from === userId && msg.to === peerId) ||
+          (msg.from === peerId && msg.to === userId))
+    );
+    if (data.messages.length !== before) {
+      writeDb(data);
+      return before - data.messages.length;
+    }
+    return 0;
+  },
+  cleanOrphanedMessages() {
+    const data = readDb();
+    const userIds = new Set(data.users.map((u) => u.id));
+    const before = data.messages.length;
+    data.messages = data.messages.filter(
+      (msg) => userIds.has(msg.from) && userIds.has(msg.to)
+    );
+    if (data.messages.length !== before) {
+      writeDb(data);
+    }
+    return before - data.messages.length;
   }
 };
