@@ -757,6 +757,170 @@ button {
   gap: 12px;
 }
 
+.ghost {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
+  color: #f4f6fb;
+  font-weight: 500;
+  padding: 6px 14px;
+}
+
+.ghost:hover {
+  background: rgba(255,255,255,0.14);
+}
+
+.typing-label {
+  font-size: 12px;
+  font-weight: 400;
+  color: #22d3ee;
+  animation: pulse 1.2s ease infinite;
+}
+
+.online-label {
+  font-size: 12px;
+  font-weight: 400;
+  color: #4ade80;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.unread-badge {
+  min-width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #3b82f6, #22d3ee);
+  color: #0c0f1a;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+  align-self: center;
+  flex-shrink: 0;
+}
+
+.date-separator {
+  text-align: center;
+  color: rgba(244, 246, 251, 0.5);
+  font-size: 12px;
+  padding: 8px 0 4px;
+  width: 100%;
+}
+
+.emoji-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 8px;
+  background: rgba(12, 15, 26, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  max-width: 280px;
+}
+
+.emoji-btn {
+  width: 36px;
+  height: 36px;
+  background: transparent;
+  border-radius: 8px;
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.emoji-btn:hover {
+  background: rgba(59, 130, 246, 0.2);
+}
+
+.emoji-toggle {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: rgba(12, 15, 26, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 20px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.emoji-toggle:hover {
+  border-color: rgba(59, 130, 246, 0.35);
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.send-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #3b82f6, #22d3ee);
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.send-btn svg {
+  width: 20px;
+  height: 20px;
+  fill: #0c0f1a;
+}
+
+.send-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.file-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #93c5fd;
+  font-size: 13px;
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+
+.file-btn:hover {
+  background: rgba(59, 130, 246, 0.15);
+}
+
+.call-card-btns {
+  display: flex;
+  gap: 8px;
+}
+
+.call-accept {
+  flex: 1;
+  background: #4ade80;
+  color: #0c0f1a;
+  font-weight: 600;
+}
+
+.call-reject {
+  flex: 1;
+  background: #ef4444;
+  color: #fff;
+  font-weight: 600;
+}
+
+.message {
+  cursor: default;
+}
+
+.message.out:hover {
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.2);
+}
+
 @media (max-width: 900px) {
   .app {
     grid-template-columns: 1fr;
