@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   decryptBytes,
   decryptMessage,
@@ -1050,11 +1050,11 @@ export default function App() {
                   const prev = messages[idx - 1];
                   const showDate = !prev || formatDate(prev.createdAt) !== formatDate(msg.createdAt);
                   return (
-                    <div key={msg.id}>
-                      {showDate && <div className="date-separator">{formatDate(msg.createdAt)}</div>}
+                    <React.Fragment key={msg.id}>
+                      {showDate && <div className="date-separator"><span>{formatDate(msg.createdAt)}</span></div>}
                       <div className={`message ${msg.isMine ? "out" : "in"}`}
                         onContextMenu={(e) => {
-                          if (msg.isMine) { e.preventDefault(); deleteMessage(msg.id); }
+                          if (msg.isMine) { e.preventDefault(); if (confirm("Видалити повідомлення?")) deleteMessage(msg.id); }
                         }}>
                         {msg.contentType === "file" && msg.meta ? (
                           <button className="file-btn" onClick={() => decryptFile(msg)}>
@@ -1065,7 +1065,7 @@ export default function App() {
                         ) : msg.contentType === "sticker" && msg.meta ? (
                           <div className="sticker">{msg.meta.label}</div>
                         ) : (
-                          <span>{msg.text}</span>
+                          <span className="message-text">{msg.text}</span>
                         )}
                         <div className="message-meta">
                           <span className="message-time">{formatTime(msg.createdAt)}</span>
@@ -1076,7 +1076,7 @@ export default function App() {
                           )}
                         </div>
                       </div>
-                    </div>
+                    </React.Fragment>
                   );
                 })}
                 <div ref={messagesEndRef} />
@@ -1094,7 +1094,7 @@ export default function App() {
                 <div className="composer-row">
                   <button className="emoji-toggle" onClick={() => setShowEmoji((p) => !p)}>😀</button>
                   <input placeholder="Повідомлення" value={msgInput}
-                    onChange={(e) => { setMsgInput(e.target.value); sendTyping(); }}
+                    onChange={(e) => { setMsgInput(e.target.value); sendTyping(); if (showEmoji) setShowEmoji(false); }}
                     onKeyDown={(e) => { if (e.key === "Enter") handleSendText(); }} />
                   <button className="send-btn" onClick={handleSendText} disabled={!msgInput.trim()}>
                     <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
