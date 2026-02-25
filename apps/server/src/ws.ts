@@ -107,6 +107,45 @@ export const attachWebSocket = (server: import("http").Server) => {
           }
         }
 
+        if (type === "message.edit") {
+          const updated = db.editMessage(payload.id, userId, {
+            ciphertext: payload.ciphertext,
+            nonce: payload.nonce,
+            selfCiphertext: payload.selfCiphertext,
+            selfNonce: payload.selfNonce,
+            senderPublicKey: payload.senderPublicKey
+          });
+          if (updated) {
+            const out = { type: "message.edited", payload: { ...updated, from: userId } };
+            const target = clients.get(payload.peerId);
+            if (target) safeSend(target.socket, JSON.stringify(out));
+            const sender = clients.get(userId);
+            if (sender) safeSend(sender.socket, JSON.stringify(out));
+          }
+        }
+
+        if (type === "message.pin") {
+          const updated = db.togglePin(payload.id, userId);
+          if (updated) {
+            const out = { type: "message.pinned", payload: { id: payload.id, pinned: updated.pinned } };
+            const target = clients.get(payload.peerId);
+            if (target) safeSend(target.socket, JSON.stringify(out));
+            const sender = clients.get(userId);
+            if (sender) safeSend(sender.socket, JSON.stringify(out));
+          }
+        }
+
+        if (type === "message.react") {
+          const updated = db.addReaction(payload.id, userId, payload.emoji);
+          if (updated) {
+            const out = { type: "message.reacted", payload: { id: payload.id, reactions: updated.reactions } };
+            const target = clients.get(payload.peerId);
+            if (target) safeSend(target.socket, JSON.stringify(out));
+            const sender = clients.get(userId);
+            if (sender) safeSend(sender.socket, JSON.stringify(out));
+          }
+        }
+
         if (
           type === "call.offer" ||
           type === "call.answer" ||

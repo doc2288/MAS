@@ -16,15 +16,20 @@ export type MessageRecord = {
   from: string;
   to: string;
   createdAt: string;
-  contentType: "text" | "file" | "emoji" | "sticker" | "gif" | "call";
+  contentType: "text" | "file" | "emoji" | "sticker" | "gif" | "call" | "voice";
   body?: string;
   meta?: Record<string, string>;
   nonce?: string;
   ciphertext?: string;
   selfNonce?: string;
   selfCiphertext?: string;
+  senderPublicKey?: string;
   deliveredAt?: string;
   readAt?: string;
+  editedAt?: string;
+  replyToId?: string;
+  pinned?: boolean;
+  reactions?: Record<string, string[]>;
 };
 
 type DbShape = {
@@ -96,6 +101,58 @@ export const db = {
     const data = readDb();
     data.messages.push(message);
     writeDb(data);
+  },
+  editMessage(id: string, userId: string, patch: Partial<MessageRecord>) {
+    const data = readDb();
+    const msg = data.messages.find((m) => m.id === id && m.from === userId);
+    if (!msg) return null;
+    Object.assign(msg, patch, { editedAt: new Date().toISOString() });
+    writeDb(data);
+    return msg;
+  },
+  togglePin(id: string, userId: string) {
+    const data = readDb();
+    const msg = data.messages.find(
+      (m) => m.id === id && (m.from === userId || m.to === userId)
+    );
+    if (!msg) return null;
+    msg.pinned = !msg.pinned;
+    writeDb(data);
+    return msg;
+  },
+  addReaction(id: string, userId: string, emoji: string) {
+    const data = readDb();
+    const msg = data.messages.find((m) => m.id === id);
+    if (!msg) return null;
+    if (!msg.reactions) msg.reactions = {};
+    if (!msg.reactions[emoji]) msg.reactions[emoji] = [];
+    const idx = msg.reactions[emoji].indexOf(userId);
+    if (idx >= 0) {
+      msg.reactions[emoji].splice(idx, 1);
+      if (msg.reactions[emoji].length === 0) delete msg.reactions[emoji];
+    } else {
+      msg.reactions[emoji] = [userId];
+    }
+    writeDb(data);
+    return msg;
+  },
+  getPinnedMessages(userId: string, peerId: string) {
+    return readDb().messages.filter(
+      (msg) =>
+        msg.pinned &&
+        ((msg.from === userId && msg.to === peerId) ||
+          (msg.from === peerId && msg.to === userId))
+    );
+  },
+  searchMessages(userId: string, peerId: string, query: string) {
+    const q = query.toLowerCase();
+    return readDb().messages.filter(
+      (msg) =>
+        ((msg.from === userId && msg.to === peerId) ||
+          (msg.from === peerId && msg.to === userId)) &&
+        (msg.body?.toLowerCase().includes(q) ||
+          msg.meta?.fileName?.toLowerCase().includes(q))
+    );
   },
   updateMessages(ids: string[], patch: Partial<MessageRecord>) {
     const data = readDb();

@@ -27,11 +27,15 @@ type UiMessage = {
   from: string;
   to: string;
   createdAt: string;
-  contentType: "text" | "file" | "emoji" | "sticker" | "gif";
+  contentType: "text" | "file" | "emoji" | "sticker" | "gif" | "voice";
   text?: string;
   meta?: Record<string, string>;
   isMine: boolean;
   status?: "sent" | "delivered" | "read";
+  replyToId?: string;
+  editedAt?: string;
+  pinned?: boolean;
+  reactions?: Record<string, string[]>;
 };
 
 type ChatSummary = {
@@ -131,6 +135,13 @@ export default function App() {
   const [showEmoji, setShowEmoji] = useState(false);
   const [msgInput, setMsgInput] = useState("");
   const [unreadMap, setUnreadMap] = useState<Record<string, number>>({});
+  const [replyTo, setReplyTo] = useState<UiMessage | null>(null);
+  const [editingMsg, setEditingMsg] = useState<UiMessage | null>(null);
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; msg: UiMessage } | null>(null);
+  const [chatSearch, setChatSearch] = useState("");
+  const [chatSearchOpen, setChatSearchOpen] = useState(false);
+  const [reactionPicker, setReactionPicker] = useState<string | null>(null);
+  const quickReactions = ["👍","❤️","😂","😮","😢","🔥"];
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<number | null>(null);
@@ -386,6 +397,23 @@ export default function App() {
       if (type === "message.deleted") {
         setMessages((prev) => prev.filter((msg) => msg.id !== payload.id));
       }
+      if (type === "message.edited") {
+        decryptIncoming(payload).then((decrypted) => {
+          setMessages((prev) => prev.map((msg) =>
+            msg.id === payload.id ? { ...decrypted, editedAt: payload.editedAt } : msg
+          ));
+        });
+      }
+      if (type === "message.pinned") {
+        setMessages((prev) => prev.map((msg) =>
+          msg.id === payload.id ? { ...msg, pinned: payload.pinned } : msg
+        ));
+      }
+      if (type === "message.reacted") {
+        setMessages((prev) => prev.map((msg) =>
+          msg.id === payload.id ? { ...msg, reactions: payload.reactions } : msg
+        ));
+      }
       if (type === "presence") {
         setOnlineUserIds((prev) => {
           const next = new Set(prev);
@@ -463,6 +491,19 @@ export default function App() {
   }, [status]);
 
   useEffect(() => { scrollToBottom(); }, [messages, scrollToBottom]);
+
+  useEffect(() => {
+    if (!ctxMenu) return;
+    const close = () => setCtxMenu(null);
+    window.addEventListener("click", close);
+    return () => window.removeEventListener("click", close);
+  }, [ctxMenu]);
+
+  const filteredMessages = useMemo(() => {
+    if (!chatSearch.trim()) return messages;
+    const q = chatSearch.toLowerCase();
+    return messages.filter((m) => m.text?.toLowerCase().includes(q));
+  }, [messages, chatSearch]);
 
   const requestCode = async () => {
     if (!isValidPhoneNumber(fullPhone)) { setStatus("Невірний номер телефону."); return; }
@@ -600,7 +641,11 @@ export default function App() {
       text, meta: payload.meta
         ? { ...payload.meta, senderPublicKey: payload.senderPublicKey, ...(decryptFailed ? { decryptFailed: "true" } : {}) }
         : { senderPublicKey: payload.senderPublicKey, ...(decryptFailed ? { decryptFailed: "true" } : {}) },
-      isMine, status: msgStatus as UiMessage["status"]
+      isMine, status: msgStatus as UiMessage["status"],
+      replyToId: payload.replyToId,
+      editedAt: payload.editedAt,
+      pinned: payload.pinned,
+      reactions: payload.reactions
     };
   };
 
@@ -632,7 +677,8 @@ export default function App() {
   const sendMessage = async (
     contentType: UiMessage["contentType"],
     text?: string,
-    meta?: Record<string, string>
+    meta?: Record<string, string>,
+    replyToId?: string
   ) => {
     if (!peer) { setStatus("Оберіть чат."); return; }
     if (!keys) { setStatus("Ключі не ініціалізовані."); return; }
@@ -657,12 +703,13 @@ export default function App() {
         nonce: encrypted.nonce, ciphertext: encrypted.ciphertext,
         senderPublicKey: keys.publicKey,
         selfNonce: selfEncrypted.nonce, selfCiphertext: selfEncrypted.ciphertext,
-        meta
+        meta,
+        ...(replyToId ? { replyToId } : {})
       }
     }));
     setMessages((prev) => [
       ...prev,
-      { id, from: user?.id ?? "", to: peer.id, createdAt, contentType, text, meta, isMine: true, status: "sent" }
+      { id, from: user?.id ?? "", to: peer.id, createdAt, contentType, text, meta, isMine: true, status: "sent", replyToId }
     ]);
     fetchChats();
   };
@@ -670,10 +717,69 @@ export default function App() {
   const handleSendText = () => {
     const value = msgInput.trim();
     if (!value) return;
-    sendMessage("text", value);
+    if (editingMsg) {
+      editMessage(editingMsg.id, value);
+      setMsgInput("");
+      return;
+    }
+    sendMessage("text", value, undefined, replyTo?.id);
     setMsgInput("");
     setShowEmoji(false);
+    setReplyTo(null);
   };
+
+  const editMessage = async (msgId: string, newText: string) => {
+    if (!peer || !keys || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+    let targetKey = peer.publicKey;
+    if (!targetKey) return;
+    const encrypted = encryptMessage(newText, keys.secretKey, targetKey);
+    const selfEncrypted = encryptMessage(newText, keys.secretKey, keys.publicKey);
+    wsRef.current.send(JSON.stringify({
+      type: "message.edit",
+      payload: {
+        id: msgId, peerId: peer.id,
+        nonce: encrypted.nonce, ciphertext: encrypted.ciphertext,
+        selfNonce: selfEncrypted.nonce, selfCiphertext: selfEncrypted.ciphertext,
+        senderPublicKey: keys.publicKey
+      }
+    }));
+    setMessages((prev) => prev.map((m) =>
+      m.id === msgId ? { ...m, text: newText, editedAt: new Date().toISOString() } : m
+    ));
+    setEditingMsg(null);
+  };
+
+  const pinMessage = (msgId: string) => {
+    if (!peer || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+    wsRef.current.send(JSON.stringify({ type: "message.pin", payload: { id: msgId, peerId: peer.id } }));
+    setMessages((prev) => prev.map((m) =>
+      m.id === msgId ? { ...m, pinned: !m.pinned } : m
+    ));
+  };
+
+  const reactToMessage = (msgId: string, emoji: string) => {
+    if (!peer || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+    wsRef.current.send(JSON.stringify({ type: "message.react", payload: { id: msgId, peerId: peer.id, emoji } }));
+    setMessages((prev) => prev.map((m) => {
+      if (m.id !== msgId) return m;
+      const reactions = { ...(m.reactions ?? {}) };
+      if (!reactions[emoji]) reactions[emoji] = [];
+      const uid = user?.id ?? "";
+      const idx = reactions[emoji].indexOf(uid);
+      if (idx >= 0) { reactions[emoji].splice(idx, 1); if (!reactions[emoji].length) delete reactions[emoji]; }
+      else { reactions[emoji] = [uid]; }
+      return { ...m, reactions };
+    }));
+    setReactionPicker(null);
+  };
+
+  const copyMessageText = (text: string) => {
+    navigator.clipboard.writeText(text).then(() => setStatus("Скопійовано")).catch(() => {});
+  };
+
+  const startReply = (msg: UiMessage) => { setReplyTo(msg); setEditingMsg(null); setCtxMenu(null); };
+  const startEdit = (msg: UiMessage) => { setEditingMsg(msg); setMsgInput(msg.text ?? ""); setReplyTo(null); setCtxMenu(null); };
+  const cancelReplyEdit = () => { setReplyTo(null); setEditingMsg(null); setMsgInput(""); };
 
   const deleteMessage = (msgId: string) => {
     if (!peer || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
@@ -1083,6 +1189,9 @@ export default function App() {
           </div>
           {activeTab === "chat" && peer && (
             <div className="call-actions">
+              <button className="gear" onClick={() => { setChatSearchOpen((p) => !p); setChatSearch(""); }} aria-label="Пошук" title="Пошук в чаті">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8" fill="none" stroke="currentColor" strokeWidth="2"/><path d="M21 21l-4.35-4.35" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+              </button>
               <button className="gear" onClick={clearChat} aria-label="Очистити чат" title="Очистити чат">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -1105,37 +1214,73 @@ export default function App() {
         {activeTab === "chat" ? (
           peer ? (
             <>
+              {chatSearchOpen && (
+                <div className="chat-search-bar">
+                  <input placeholder="Пошук у чаті…" value={chatSearch} autoFocus
+                    onChange={(e) => setChatSearch(e.target.value)} />
+                  <span className="chat-search-count">{chatSearch ? `${filteredMessages.length} знайдено` : ""}</span>
+                  <button className="ghost" onClick={() => { setChatSearchOpen(false); setChatSearch(""); }}>✕</button>
+                </div>
+              )}
+              {messages.some((m) => m.pinned) && (
+                <div className="pinned-bar" onClick={() => {
+                  const pinned = messages.find((m) => m.pinned);
+                  if (pinned) { const el = document.getElementById(`msg-${pinned.id}`); el?.scrollIntoView({ behavior: "smooth" }); }
+                }}>
+                  📌 {messages.filter((m) => m.pinned).length} закріплене повідомлення
+                </div>
+              )}
               <div className="messages">
-                {messages.map((msg, idx) => {
-                  const prev = messages[idx - 1];
+                {(chatSearch ? filteredMessages : messages).map((msg, idx, arr) => {
+                  const prev = arr[idx - 1];
                   const showDate = !prev || formatDate(prev.createdAt) !== formatDate(msg.createdAt);
+                  const replyMsg = msg.replyToId ? messages.find((m) => m.id === msg.replyToId) : null;
                   return (
                     <React.Fragment key={msg.id}>
                       {showDate && <div className="date-separator"><span>{formatDate(msg.createdAt)}</span></div>}
-                      <div className={`message ${msg.isMine ? "out" : "in"} ${msg.meta?.decryptFailed ? "decrypt-failed" : ""}`}
-                        onContextMenu={(e) => {
-                          if (msg.isMine || msg.meta?.decryptFailed) {
-                            e.preventDefault();
-                            if (confirm("Видалити повідомлення?")) deleteMessage(msg.id);
-                          }
-                        }}>
+                      <div id={`msg-${msg.id}`}
+                        className={`message ${msg.isMine ? "out" : "in"} ${msg.meta?.decryptFailed ? "decrypt-failed" : ""} ${msg.pinned ? "pinned-msg" : ""}`}
+                        onContextMenu={(e) => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY, msg }); }}>
+                        {msg.pinned && <div className="pin-badge">📌</div>}
+                        {replyMsg && (
+                          <div className="reply-preview" onClick={() => {
+                            const el = document.getElementById(`msg-${replyMsg.id}`);
+                            el?.scrollIntoView({ behavior: "smooth" });
+                          }}>
+                            <span className="reply-author">{replyMsg.isMine ? "Ви" : (peer?.login ?? peer?.phone)}</span>
+                            <span className="reply-text">{replyMsg.text?.slice(0, 60) ?? "..."}</span>
+                          </div>
+                        )}
                         {msg.meta?.decryptFailed ? (
                           <div className="decrypt-failed-content">
                             <span className="message-text">{msg.text}</span>
                             <button className="decrypt-delete-btn" onClick={() => deleteMessage(msg.id)}>Видалити</button>
                           </div>
                         ) : msg.contentType === "file" && msg.meta ? (
-                          <button className="file-btn" onClick={() => decryptFile(msg)}>
-                            📎 {msg.meta.fileName}
-                          </button>
-                        ) : msg.contentType === "gif" && msg.meta ? (
-                          <img src={msg.meta.url} alt="gif" />
-                        ) : msg.contentType === "sticker" && msg.meta ? (
-                          <div className="sticker">{msg.meta.label}</div>
+                          <button className="file-btn" onClick={() => decryptFile(msg)}>📎 {msg.meta.fileName}</button>
                         ) : (
                           <span className="message-text">{msg.text}</span>
                         )}
+                        {msg.reactions && Object.keys(msg.reactions).length > 0 && (
+                          <div className="reactions-row">
+                            {Object.entries(msg.reactions).map(([emoji, users]) => (
+                              <button key={emoji} className={`reaction-chip ${(users as string[]).includes(user?.id ?? "") ? "my-reaction" : ""}`}
+                                onClick={() => reactToMessage(msg.id, emoji)}>
+                                {emoji} {(users as string[]).length}
+                              </button>
+                            ))}
+                            <button className="reaction-chip add-reaction" onClick={() => setReactionPicker(reactionPicker === msg.id ? null : msg.id)}>+</button>
+                          </div>
+                        )}
+                        {reactionPicker === msg.id && (
+                          <div className="reaction-picker-row">
+                            {quickReactions.map((e) => (
+                              <button key={e} className="reaction-pick" onClick={() => reactToMessage(msg.id, e)}>{e}</button>
+                            ))}
+                          </div>
+                        )}
                         <div className="message-meta">
+                          {msg.editedAt && <span className="edited-label">ред.</span>}
                           <span className="message-time">{formatTime(msg.createdAt)}</span>
                           {msg.isMine && !msg.meta?.decryptFailed && (
                             <span className={`message-status ${msg.status ?? "sent"}`}>
@@ -1149,21 +1294,38 @@ export default function App() {
                 })}
                 <div ref={messagesEndRef} />
               </div>
+              {ctxMenu && (
+                <div className="ctx-menu" style={{ top: ctxMenu.y, left: ctxMenu.x }}>
+                  <button onClick={() => { startReply(ctxMenu.msg); }}>↩ Відповісти</button>
+                  {ctxMenu.msg.isMine && <button onClick={() => { startEdit(ctxMenu.msg); }}>✏ Редагувати</button>}
+                  <button onClick={() => { copyMessageText(ctxMenu.msg.text ?? ""); setCtxMenu(null); }}>📋 Копіювати</button>
+                  <button onClick={() => { pinMessage(ctxMenu.msg.id); setCtxMenu(null); }}>{ctxMenu.msg.pinned ? "📌 Відкріпити" : "📌 Закріпити"}</button>
+                  <button onClick={() => { setReactionPicker(ctxMenu.msg.id); setCtxMenu(null); }}>😀 Реакція</button>
+                  {ctxMenu.msg.isMine && <button className="ctx-danger" onClick={() => { deleteMessage(ctxMenu.msg.id); setCtxMenu(null); }}>🗑 Видалити</button>}
+                </div>
+              )}
               <div className="composer">
                 {showEmoji && (
                   <div className="emoji-picker">
                     {emojiList.map((e) => (
-                      <button key={e} className="emoji-btn" onClick={() => {
-                        setMsgInput((p) => p + e);
-                      }}>{e}</button>
+                      <button key={e} className="emoji-btn" onClick={() => setMsgInput((p) => p + e)}>{e}</button>
                     ))}
+                  </div>
+                )}
+                {(replyTo || editingMsg) && (
+                  <div className="composer-reply-bar">
+                    <div className="composer-reply-info">
+                      <span className="composer-reply-label">{editingMsg ? "✏ Редагування" : `↩ ${replyTo?.isMine ? "Ви" : (peer?.login ?? peer?.phone)}`}</span>
+                      <span className="composer-reply-text">{(editingMsg ?? replyTo)?.text?.slice(0, 80)}</span>
+                    </div>
+                    <button className="composer-reply-close" onClick={cancelReplyEdit}>✕</button>
                   </div>
                 )}
                 <div className="composer-row">
                   <button className="emoji-toggle" onClick={() => setShowEmoji((p) => !p)}>😀</button>
-                  <input placeholder="Повідомлення" value={msgInput}
+                  <textarea placeholder="Повідомлення" value={msgInput} rows={1}
                     onChange={(e) => { setMsgInput(e.target.value); sendTyping(); if (showEmoji) setShowEmoji(false); }}
-                    onKeyDown={(e) => { if (e.key === "Enter") handleSendText(); }} />
+                    onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendText(); } }} />
                   <button className="send-btn" onClick={handleSendText} disabled={!msgInput.trim()}>
                     <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
                   </button>

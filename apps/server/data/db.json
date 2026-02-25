@@ -1,45 +1,65 @@
 {
   "users": [
     {
-      "id": "35c4e3a6-f4b5-47b7-9f17-8219a44044d5",
+      "id": "88086ab2-e096-4ae2-8080-ec2a8795e9b3",
       "phone": "+12025559999",
-      "createdAt": "2026-02-25T21:08:01.484Z",
+      "createdAt": "2026-02-25T21:22:54.620Z",
       "login": "testuser2",
-      "publicKey": "vHX+Bk5pmNfe7C7x1zjbpasy3Axa8v01tCMWJ4cy2lQ=",
-      "secretKey": "gKVf8aUS7PanGOkJUaJTr+5dSDVNtvJuo8BsR7l1krw="
+      "publicKey": "jYEjJv/QIB9wDFmmaKA2ft+Q5HeKIo72sK4x4QOpZ18=",
+      "secretKey": "Q+YhcRR3WizCUbDAp3ACgVBsEIyi4W90PY7foSOWaHk="
     },
     {
-      "id": "0c5d5b06-3c95-415e-a000-2edf67c72e4d",
+      "id": "466955df-2f36-417c-b1b1-aa4a81d0fe5e",
       "phone": "+12025551234",
-      "createdAt": "2026-02-25T21:13:16.279Z",
+      "createdAt": "2026-02-25T21:27:13.551Z",
+      "login": "testuser1",
       "publicKey": "a2vNefkZTZVaftD/uekVLFw/U1tdFY+3zjpT1E+bqyE=",
       "secretKey": "R1lwjUhf+MoPHZeQ4+zv9/7dVJ8uycGeUIa8VuP7wCo="
     }
   ],
   "messages": [
     {
-      "id": "64c7b839-0181-4409-8d42-547b9e673710",
-      "to": "35c4e3a6-f4b5-47b7-9f17-8219a44044d5",
-      "createdAt": "2026-02-25T21:10:56.051Z",
+      "id": "28c1c739-b497-48d3-9c18-aee338840f2f",
+      "to": "88086ab2-e096-4ae2-8080-ec2a8795e9b3",
+      "createdAt": "2026-02-25T21:30:06.246Z",
       "contentType": "text",
-      "nonce": "S1SP4C8hqKpmf/souByEi/bV+ereGb+t",
-      "ciphertext": "0rLtel9fbdpBt/hjdtWnPdJIIffLs6A3or94akE7tT2QTxQoZzzcnk1P2QtHfqVRnM3g3cWFv7mlEdsN9tLcEHVSjw5qcU5tdp9hhCGUkzPSOqh5",
-      "senderPublicKey": "ttZrTFphDuAaeAYFKVo4bUy1fq1nLAz+nw7gg6Joxhw=",
-      "selfNonce": "nL9MVuuD4mczRls9gpxIo/Fa7PVbCqV1",
-      "selfCiphertext": "PFTTdoj3Nnqalp/58qS1Z1zuSDlpExwBl0xeteVxlM8tbgooLmJ/qja/PCqiThjHvRGxae7mltvlidyP0vwjJsrGTTW+sc7d5EvxkP8k+jxkQiju",
-      "from": "c8c374df-c352-40a1-93f4-5421f90f61ae"
+      "nonce": "gZt/xYw/cjbpEox164+0SoJHlNSiWtiL",
+      "ciphertext": "iY+leeG3+fetSZ5ojI1r/idoJDmuN39Xire3wnWb1DvbWyQMfJRU256CiWE60fvR62975DukA5Srzpj5mo30Dzr7uGOuFhgdBOboVe4H",
+      "senderPublicKey": "a2vNefkZTZVaftD/uekVLFw/U1tdFY+3zjpT1E+bqyE=",
+      "selfNonce": "TOJeSJh568Rh4O0FKY/cbIfyGyOtVp88",
+      "selfCiphertext": "LpMQq+eLN55azaqDgPpsJ+G8FCV343KTBR+JQIbpVv9AqA8/H8Vgc7wbUKAAkwmvSRBP8UILPbLvssHAt4TJ5JqjDyYW49szQlmQRZay",
+      "from": "466955df-2f36-417c-b1b1-aa4a81d0fe5e"
     },
     {
-      "id": "fba5ad4c-8d55-4c75-a24b-706441e41c8f",
-      "to": "35c4e3a6-f4b5-47b7-9f17-8219a44044d5",
-      "createdAt": "2026-02-25T21:11:11.869Z",
+      "id": "edfb7a54-2fbd-4e5e-a1ef-7fb9bc87fa76",
+      "to": "88086ab2-e096-4ae2-8080-ec2a8795e9b3",
+      "createdAt": "2026-02-25T21:30:26.954Z",
       "contentType": "text",
-      "nonce": "58JNmT5LHQr/jlqj0G4cBWSx2NlvfXXw",
-      "ciphertext": "Ftk73EExpkGNj5o2PYd+mTqFA8sqXluV4bW4sMrxE1V9g06M5OaVhtllj+GysP3372mAm1ujJJPGJ1/DV+1H/OaBfkbnwwsY2Boqv5F9sw==",
-      "senderPublicKey": "ttZrTFphDuAaeAYFKVo4bUy1fq1nLAz+nw7gg6Joxhw=",
-      "selfNonce": "njy7nTfANgjRsmYf49TZ/5WSC+UitCAD",
-      "selfCiphertext": "kuJGBi1zckf2wv0J9E/4gyH6kTYQT3q5g0k2tNgmdvqiPYKduKkydVQ9G3gazw8jldgLMG+lZ7XNIDRst3zunYNyPhRvowp7+tm9MOOGkg==",
-      "from": "c8c374df-c352-40a1-93f4-5421f90f61ae"
+      "nonce": "BtkJzYDBuhpp9QG/kCE8tVkT8kuR/G9l",
+      "ciphertext": "FRNDz2kZ49r+CgL+OSTmMMj7Uu9NN2tKFVqFU21JHuaRAG7eFU65kS8L7cCTs7+i5o8AQ/dV028=",
+      "senderPublicKey": "a2vNefkZTZVaftD/uekVLFw/U1tdFY+3zjpT1E+bqyE=",
+      "selfNonce": "mm0xOgn4MP5I/Q3mhlZwBvERtdZxSU0K",
+      "selfCiphertext": "wR8yJP5adBsPsBKw7QWzwY+lsvYPPGumA8ojsDrIFIfDH2mfSI6/KEEtot5nPWFMdkX4P9zr7RM=",
+      "from": "466955df-2f36-417c-b1b1-aa4a81d0fe5e"
+    },
+    {
+      "id": "3d3126a9-20b5-40cf-957a-a99eb8d3196c",
+      "to": "88086ab2-e096-4ae2-8080-ec2a8795e9b3",
+      "createdAt": "2026-02-25T21:52:08.895Z",
+      "contentType": "file",
+      "nonce": "pOsknRPN0hsyOVeTFmjMUrKaZEugBCxQ",
+      "ciphertext": "iOFOGHtNiFCT6XagIPvu/w==",
+      "senderPublicKey": "a2vNefkZTZVaftD/uekVLFw/U1tdFY+3zjpT1E+bqyE=",
+      "selfNonce": "f9BfNLbE2tzFZiDAW4eO/R4x2AeXXOv6",
+      "selfCiphertext": "cPD9RJR1rx5K6pGa2AcAFQ==",
+      "meta": {
+        "fileName": "package.json",
+        "fileType": "application/json",
+        "fileUrl": "http://localhost:4000/uploads/d97c9534daac1dfd83bdfa9ff566ebe3",
+        "nonce": "gHT2ClAMLLFY7VB4qHI9hyDai+x1qpXb",
+        "localUrl": "blob:http://localhost:5173/1cc24114-4d64-4c93-8c52-582068a0db95"
+      },
+      "from": "466955df-2f36-417c-b1b1-aa4a81d0fe5e"
     }
   ]
 }
