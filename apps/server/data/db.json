@@ -13,8 +13,8 @@
       "phone": "+12025551234",
       "createdAt": "2026-02-25T21:27:13.551Z",
       "login": "testuser1",
-      "publicKey": "a2vNefkZTZVaftD/uekVLFw/U1tdFY+3zjpT1E+bqyE=",
-      "secretKey": "R1lwjUhf+MoPHZeQ4+zv9/7dVJ8uycGeUIa8VuP7wCo="
+      "publicKey": "test123",
+      "secretKey": "test456"
     }
   ],
   "messages": [
