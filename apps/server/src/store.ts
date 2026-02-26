@@ -41,6 +41,8 @@ sqlite.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_messages_from ON messages("from");
   CREATE INDEX IF NOT EXISTS idx_messages_to ON messages("to");
+  CREATE INDEX IF NOT EXISTS idx_messages_conv ON messages("from", "to", createdAt);
+  CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(createdAt);
   CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone);
   CREATE INDEX IF NOT EXISTS idx_users_login ON users(login);
 `);
@@ -208,8 +210,11 @@ export const db = {
     });
     txn();
   },
-  getMessagesFor(userId: string, peerId: string): MessageRecord[] {
-    return (stmts.getMessagesFor.all(userId, peerId, peerId, userId) as any[]).map(fromRow);
+  getMessagesFor(userId: string, peerId: string, limit = 100, offset = 0): MessageRecord[] {
+    return (sqlite.prepare(
+      `SELECT * FROM messages WHERE ("from" = ? AND "to" = ?) OR ("from" = ? AND "to" = ?)
+       ORDER BY createdAt DESC LIMIT ? OFFSET ?`
+    ).all(userId, peerId, peerId, userId, limit, offset) as any[]).map(fromRow).reverse();
   },
   getMessagesForUser(userId: string): MessageRecord[] {
     return (stmts.getMessagesForUser.all(userId, userId) as any[]).map(fromRow);

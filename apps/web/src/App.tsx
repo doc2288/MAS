@@ -558,14 +558,16 @@ export default function App() {
     } catch { setStatus("Помилка мережі."); }
   };
 
-  const loadMessages = async (peerId: string) => {
+  const loadMessages = async (peerId: string, append = false) => {
     if (!token || !keys) return;
     try {
-      const res = await fetch(`${API_URL}/messages/${peerId}`, { headers: authHeaders });
+      const offset = append ? messages.length : 0;
+      const res = await fetch(`${API_URL}/messages/${peerId}?limit=100&offset=${offset}`, { headers: authHeaders });
       const data = await res.json();
       const mapped: UiMessage[] = [];
       for (const item of data) { mapped.push(await decryptIncoming(item)); }
-      setMessages(mapped);
+      if (append) { setMessages((prev) => [...mapped, ...prev]); }
+      else { setMessages(mapped); }
       const incomingIds = mapped.filter((msg) => !msg.isMine).map((msg) => msg.id);
       sendReadReceipts(peerId, incomingIds);
       setUnreadMap((prev) => ({ ...prev, [peerId]: 0 }));
