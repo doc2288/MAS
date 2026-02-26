@@ -158,28 +158,11 @@ app.get("/messages/:peerId", (req, res) => {
   res.json(messages);
 });
 
-// ── Chats ──
+// ── Chats (optimized SQL query with GROUP BY) ──
 app.get("/chats", (req, res) => {
   const userId = requireAuth(req);
   if (!userId) { res.status(401).json({ error: "unauthorized" }); return; }
-  const all = db.getMessagesForUser(userId);
-  const map = new Map<string, typeof all[0]>();
-  for (const message of all) {
-    const peerId = message.from === userId ? message.to : message.from;
-    const existing = map.get(peerId);
-    if (!existing || existing.createdAt < message.createdAt) map.set(peerId, message);
-  }
-  const chats = Array.from(map.entries())
-    .map(([peerId, lastMessage]) => {
-      const peer = db.findUserById(peerId);
-      return {
-        peerId, peerPhone: peer?.phone ?? "Unknown", peerLogin: peer?.login,
-        peerPublicKey: peer?.publicKey, lastMessageAt: lastMessage.createdAt,
-        lastContentType: lastMessage.contentType
-      };
-    })
-    .sort((a, b) => b.lastMessageAt.localeCompare(a.lastMessageAt));
-  res.json(chats);
+  res.json(db.getChatList(userId));
 });
 
 // ── Files ──

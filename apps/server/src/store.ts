@@ -8,6 +8,7 @@ if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 const sqlite = new Database(path.join(dataDir, "mas.db"));
 sqlite.pragma("journal_mode = WAL");
 sqlite.pragma("foreign_keys = ON");
+sqlite.pragma("busy_timeout = 5000");
 
 sqlite.exec(`
   CREATE TABLE IF NOT EXISTS users (
@@ -78,6 +79,15 @@ export type MessageRecord = {
   reactions?: Record<string, string[]>;
 };
 
+export type ChatSummary = {
+  peerId: string;
+  peerPhone: string;
+  peerLogin?: string;
+  peerPublicKey?: string;
+  lastMessageAt: string;
+  lastContentType: string;
+};
+
 const stmts = {
   upsertUser: sqlite.prepare(`
     INSERT INTO users (id, phone, login, publicKey, secretKey, status, createdAt)
@@ -88,7 +98,7 @@ const stmts = {
   findUserById: sqlite.prepare(`SELECT * FROM users WHERE id = ?`),
   findUserByPhone: sqlite.prepare(`SELECT * FROM users WHERE phone = ?`),
   findUserByLogin: sqlite.prepare(`SELECT * FROM users WHERE login = ?`),
-  searchByLoginPrefix: sqlite.prepare(`SELECT * FROM users WHERE login LIKE ? AND id != ?`),
+  searchByLoginPrefix: sqlite.prepare(`SELECT * FROM users WHERE login LIKE ? AND id != ? LIMIT 20`),
   isLoginTaken: sqlite.prepare(`SELECT 1 FROM users WHERE login = ? AND id != ?`),
   insertMessage: sqlite.prepare(`
     INSERT INTO messages (id, "from", "to", createdAt, contentType, body, meta, nonce, ciphertext,
@@ -96,20 +106,32 @@ const stmts = {
     VALUES (@id, @from, @to, @createdAt, @contentType, @body, @meta, @nonce, @ciphertext,
       @selfNonce, @selfCiphertext, @senderPublicKey, @deliveredAt, @readAt, @editedAt, @replyToId, @pinned, @reactions)
   `),
-  getMessagesFor: sqlite.prepare(`
-    SELECT * FROM messages WHERE ("from" = ? AND "to" = ?) OR ("from" = ? AND "to" = ?) ORDER BY createdAt ASC
+  paginatedMessages: sqlite.prepare(`
+    SELECT * FROM messages WHERE ("from" = ? AND "to" = ?) OR ("from" = ? AND "to" = ?)
+    ORDER BY createdAt DESC LIMIT ? OFFSET ?
   `),
-  getMessagesForUser: sqlite.prepare(`
-    SELECT * FROM messages WHERE "from" = ? OR "to" = ?
+  chatList: sqlite.prepare(`
+    WITH peers AS (
+      SELECT
+        CASE WHEN "from" = @uid THEN "to" ELSE "from" END AS peerId,
+        MAX(rowid) AS lastRowid
+      FROM messages
+      WHERE "from" = @uid OR "to" = @uid
+      GROUP BY peerId
+    )
+    SELECT p.peerId, m.createdAt AS lastMessageAt, m.contentType AS lastContentType
+    FROM peers p
+    JOIN messages m ON m.rowid = p.lastRowid
+    ORDER BY m.createdAt DESC
+    LIMIT 50
   `),
   deleteMessage: sqlite.prepare(`DELETE FROM messages WHERE id = ? AND ("from" = ? OR "to" = ?)`),
   deleteConversation: sqlite.prepare(`
     DELETE FROM messages WHERE ("from" = ? AND "to" = ?) OR ("from" = ? AND "to" = ?)
   `),
-  updateMessagePatch: sqlite.prepare(`
-    UPDATE messages SET deliveredAt = COALESCE(@deliveredAt, deliveredAt),
-      readAt = COALESCE(@readAt, readAt) WHERE id = ?
-  `),
+  updateDelivered: sqlite.prepare(
+    `UPDATE messages SET deliveredAt = COALESCE(?, deliveredAt), readAt = COALESCE(?, readAt) WHERE id = ?`
+  ),
   editMessage: sqlite.prepare(`
     UPDATE messages SET ciphertext=@ciphertext, nonce=@nonce, selfCiphertext=@selfCiphertext,
       selfNonce=@selfNonce, senderPublicKey=@senderPublicKey, editedAt=@editedAt
@@ -117,6 +139,7 @@ const stmts = {
   `),
   togglePin: sqlite.prepare(`UPDATE messages SET pinned = NOT pinned WHERE id = ? AND ("from" = ? OR "to" = ?)`),
   getMessage: sqlite.prepare(`SELECT * FROM messages WHERE id = ?`),
+  updateReactions: sqlite.prepare(`UPDATE messages SET reactions = ? WHERE id = ?`),
   migrateFrom: sqlite.prepare(`UPDATE messages SET "from" = ? WHERE "from" = ?`),
   migrateTo: sqlite.prepare(`UPDATE messages SET "to" = ? WHERE "to" = ?`),
   orphanedUserIds: sqlite.prepare(`
@@ -126,11 +149,45 @@ const stmts = {
   `),
 };
 
+const batchUpdateDelivered = sqlite.transaction((ids: string[], deliveredAt: string | null, readAt: string | null) => {
+  for (const id of ids) stmts.updateDelivered.run(deliveredAt, readAt, id);
+});
+
+const transactReaction = sqlite.transaction((id: string, userId: string, emoji: string) => {
+  const row = fromRow(stmts.getMessage.get(id));
+  if (!row) return null;
+  const reactions: Record<string, string[]> = row.reactions ?? {};
+  if (!reactions[emoji]) reactions[emoji] = [];
+  const idx = reactions[emoji].indexOf(userId);
+  if (idx >= 0) {
+    reactions[emoji].splice(idx, 1);
+    if (!reactions[emoji].length) delete reactions[emoji];
+  } else {
+    reactions[emoji] = [userId];
+  }
+  stmts.updateReactions.run(JSON.stringify(reactions), id);
+  return { ...row, reactions };
+});
+
 const toRow = (msg: any) => ({
-  ...msg,
+  id: msg.id,
+  from: msg.from,
+  to: msg.to,
+  createdAt: msg.createdAt,
+  contentType: msg.contentType ?? "text",
+  body: msg.body ?? null,
   meta: msg.meta ? JSON.stringify(msg.meta) : null,
-  reactions: msg.reactions ? JSON.stringify(msg.reactions) : null,
+  nonce: msg.nonce ?? null,
+  ciphertext: msg.ciphertext ?? null,
+  selfNonce: msg.selfNonce ?? null,
+  selfCiphertext: msg.selfCiphertext ?? null,
+  senderPublicKey: msg.senderPublicKey ?? null,
+  deliveredAt: msg.deliveredAt ?? null,
+  readAt: msg.readAt ?? null,
+  editedAt: msg.editedAt ?? null,
+  replyToId: msg.replyToId ?? null,
   pinned: msg.pinned ? 1 : 0,
+  reactions: msg.reactions ? JSON.stringify(msg.reactions) : null,
 });
 
 const fromRow = (row: any): any => {
@@ -187,37 +244,30 @@ export const db = {
     return fromRow(stmts.getMessage.get(id));
   },
   addReaction(id: string, userId: string, emoji: string) {
-    const row = fromRow(stmts.getMessage.get(id));
-    if (!row) return null;
-    const reactions: Record<string, string[]> = row.reactions ?? {};
-    if (!reactions[emoji]) reactions[emoji] = [];
-    const idx = reactions[emoji].indexOf(userId);
-    if (idx >= 0) {
-      reactions[emoji].splice(idx, 1);
-      if (!reactions[emoji].length) delete reactions[emoji];
-    } else {
-      reactions[emoji] = [userId];
-    }
-    sqlite.prepare(`UPDATE messages SET reactions = ? WHERE id = ?`).run(JSON.stringify(reactions), id);
-    return { ...row, reactions };
+    return transactReaction(id, userId, emoji);
   },
   updateMessages(ids: string[], patch: Partial<MessageRecord>) {
-    const upd = sqlite.prepare(
-      `UPDATE messages SET deliveredAt = COALESCE(?, deliveredAt), readAt = COALESCE(?, readAt) WHERE id = ?`
-    );
-    const txn = sqlite.transaction(() => {
-      for (const id of ids) upd.run(patch.deliveredAt ?? null, patch.readAt ?? null, id);
-    });
-    txn();
+    batchUpdateDelivered(ids, patch.deliveredAt ?? null, patch.readAt ?? null);
   },
   getMessagesFor(userId: string, peerId: string, limit = 100, offset = 0): MessageRecord[] {
-    return (sqlite.prepare(
-      `SELECT * FROM messages WHERE ("from" = ? AND "to" = ?) OR ("from" = ? AND "to" = ?)
-       ORDER BY createdAt DESC LIMIT ? OFFSET ?`
-    ).all(userId, peerId, peerId, userId, limit, offset) as any[]).map(fromRow).reverse();
+    return (stmts.paginatedMessages.all(userId, peerId, peerId, userId, limit, offset) as any[]).map(fromRow).reverse();
+  },
+  getChatList(userId: string): ChatSummary[] {
+    const rows = stmts.chatList.all({ uid: userId }) as { peerId: string; lastMessageAt: string; lastContentType: string }[];
+    return rows.map((row) => {
+      const peer = stmts.findUserById.get(row.peerId) as UserRecord | undefined;
+      return {
+        peerId: row.peerId,
+        peerPhone: peer?.phone ?? "Unknown",
+        peerLogin: peer?.login,
+        peerPublicKey: peer?.publicKey,
+        lastMessageAt: row.lastMessageAt,
+        lastContentType: row.lastContentType,
+      };
+    });
   },
   getMessagesForUser(userId: string): MessageRecord[] {
-    return (stmts.getMessagesForUser.all(userId, userId) as any[]).map(fromRow);
+    return (sqlite.prepare(`SELECT * FROM messages WHERE "from" = ? OR "to" = ?`).all(userId, userId) as any[]).map(fromRow);
   },
   deleteMessage(id: string, userId: string) {
     return stmts.deleteMessage.run(id, userId, userId).changes > 0;
@@ -232,16 +282,5 @@ export const db = {
   },
   findOrphanedUserIds(): string[] {
     return (stmts.orphanedUserIds.all() as { u: string }[]).map((r) => r.u);
-  },
-  cleanOrphanedMessages() { return 0; },
-  getPinnedMessages(userId: string, peerId: string) {
-    return (sqlite.prepare(
-      `SELECT * FROM messages WHERE pinned = 1 AND (("from" = ? AND "to" = ?) OR ("from" = ? AND "to" = ?))`
-    ).all(userId, peerId, peerId, userId) as any[]).map(fromRow);
-  },
-  searchMessages(userId: string, peerId: string, query: string) {
-    return (sqlite.prepare(
-      `SELECT * FROM messages WHERE (("from" = ? AND "to" = ?) OR ("from" = ? AND "to" = ?)) AND (body LIKE ? OR meta LIKE ?)`
-    ).all(userId, peerId, peerId, userId, `%${query}%`, `%${query}%`) as any[]).map(fromRow);
   },
 };
