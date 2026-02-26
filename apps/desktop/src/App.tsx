@@ -124,7 +124,7 @@ export default function App() {
   const [messages, setMessages] = useState<UiMessage[]>([]);
   const [chatList, setChatList] = useState<ChatSummary[]>([]);
   const [status, setStatus] = useState("");
-  const [statusText, setStatusText] = useState("");
+  
   const [activeTab, setActiveTab] = useState<"chat" | "settings">("chat");
   const [isMenuOpen, setIsMenuOpen] = useState(true);
   const [chatQuery, setChatQuery] = useState("");
@@ -169,6 +169,8 @@ export default function App() {
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const typingTimerRef = useRef<number | null>(null);
   const peerTypingTimerRef = useRef<number | null>(null);
+  const peerRef = useRef<User | null>(null);
+  const callRef = useRef<CallState>({ status: "idle" });
 
   const devices = [
     { name: "MAS Desktop", location: "Windows · Локально", lastActive: "Активний зараз" },
@@ -179,6 +181,9 @@ export default function App() {
     { title: "Зміна статусу", time: "Сьогодні, 09:05" },
     { title: "Надіслано файл", time: "Вчора, 21:40" }
   ];
+
+  useEffect(() => { peerRef.current = peer; }, [peer]);
+  useEffect(() => { callRef.current = call; }, [call]);
 
   const scrollToBottom = useCallback(() => {
     setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
@@ -370,8 +375,10 @@ export default function App() {
   // WebSocket with auto-reconnect
   const connectWebSocket = useCallback(() => {
     if (!token) return;
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) return;
-    if (wsRef.current && wsRef.current.readyState === WebSocket.CONNECTING) return;
+    if (wsRef.current) {
+      const s = wsRef.current.readyState;
+      if (s === WebSocket.OPEN || s === WebSocket.CONNECTING) return;
+    }
 
     const ws = new WebSocket(`${WS_URL}?token=${token}`);
     wsRef.current = ws;
@@ -432,7 +439,7 @@ export default function App() {
         });
       }
       if (type === "typing") {
-        if (payload.from === peer?.id) {
+        if (payload.from === peerRef.current?.id) {
           setPeerTyping(true);
           if (peerTypingTimerRef.current) clearTimeout(peerTypingTimerRef.current);
           peerTypingTimerRef.current = window.setTimeout(() => setPeerTyping(false), 3000);
@@ -443,19 +450,19 @@ export default function App() {
           ...prev, status: "incoming", offer: payload.offer,
           isVideo: payload.isVideo, callerId: payload.from
         }));
-        if (!peer || peer.id !== payload.from) {
+        if (!peerRef.current || peerRef.current.id !== payload.from) {
           fetchPeerById(payload.from).then((u) => { if (u) setPeer(u); });
         }
       }
       if (type === "call.answer") {
-        if (call.pc && payload.answer) {
-          await call.pc.setRemoteDescription(payload.answer);
+        if (callRef.current.pc && payload.answer) {
+          await callRef.current.pc.setRemoteDescription(payload.answer);
           setCall((prev) => ({ ...prev, status: "in-call" }));
         }
       }
       if (type === "call.ice") {
-        if (call.pc && payload.candidate) {
-          await call.pc.addIceCandidate(payload.candidate);
+        if (callRef.current.pc && payload.candidate) {
+          await callRef.current.pc.addIceCandidate(payload.candidate);
         }
       }
       if (type === "call.end") { endCall(); }
@@ -469,13 +476,13 @@ export default function App() {
     ws.onerror = () => {
       ws.close();
     };
-  }, [token, peer, call.pc, fetchChats, notificationsEnabled]);
+  }, [token, fetchChats, notificationsEnabled]);
 
   useEffect(() => {
     if (!token) return;
     connectWebSocket();
     return () => {
-      if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
+      if (reconnectTimer.current) { clearTimeout(reconnectTimer.current); reconnectTimer.current = null; }
     };
   }, [token, connectWebSocket]);
 
@@ -558,14 +565,16 @@ export default function App() {
     } catch { setStatus("Помилка мережі."); }
   };
 
-  const loadMessages = async (peerId: string) => {
+  const loadMessages = async (peerId: string, append = false) => {
     if (!token || !keys) return;
     try {
-      const res = await fetch(`${API_URL}/messages/${peerId}`, { headers: authHeaders });
+      const offset = append ? messages.length : 0;
+      const res = await fetch(`${API_URL}/messages/${peerId}?limit=100&offset=${offset}`, { headers: authHeaders });
       const data = await res.json();
       const mapped: UiMessage[] = [];
       for (const item of data) { mapped.push(await decryptIncoming(item)); }
-      setMessages(mapped);
+      if (append) { setMessages((prev) => [...mapped, ...prev]); }
+      else { setMessages(mapped); }
       const incomingIds = mapped.filter((msg) => !msg.isMine).map((msg) => msg.id);
       sendReadReceipts(peerId, incomingIds);
       setUnreadMap((prev) => ({ ...prev, [peerId]: 0 }));
@@ -850,12 +859,7 @@ export default function App() {
     } catch { setStatus("Помилка завантаження файлу."); }
   };
 
-  const updateStatus = () => {
-    if (!wsRef.current || !statusText) return;
-    wsRef.current.send(JSON.stringify({ type: "status.update", payload: { status: statusText } }));
-    setStatus(`Ваш статус: ${statusText}`);
-    setStatusText("");
-  };
+  
 
   // -- Call functions with error handling --
   const renderCallWindow = () => {
