@@ -5,9 +5,9 @@ import fs from "node:fs";
 import express from "express";
 import cors from "cors";
 import multer from "multer";
-import { attachWebSocket } from "./ws";
-import { db } from "./store";
-import { requestSmsCode, verifySmsCode, verifyToken } from "./auth";
+import { attachWebSocket } from "./ws.js";
+import { db } from "./store.js";
+import { requestSmsCode, verifySmsCode, verifyToken } from "./auth.js";
 
 const app = express();
 const server = http.createServer(app);
@@ -58,6 +58,10 @@ app.get("/users/me", (req, res) => {
     return;
   }
   const user = db.findUserById(userId);
+  if (!user) {
+    res.status(401).json({ error: "user_not_found" });
+    return;
+  }
   res.json(user);
 });
 
@@ -109,11 +113,11 @@ app.get("/users/search", (req, res) => {
   }
   const users = db.searchUsersByLoginPrefix(normalized, userId);
   res.json(
-    users.map((user) => ({
-      id: user.id,
-      phone: user.phone,
-      login: user.login,
-      publicKey: user.publicKey
+    users.map((u) => ({
+      id: u.id,
+      phone: u.phone,
+      login: u.login,
+      publicKey: u.publicKey
     }))
   );
 });
@@ -165,7 +169,7 @@ app.post("/keys", (req, res) => {
     res.status(401).json({ error: "unauthorized" });
     return;
   }
-  const { publicKey } = req.body as { publicKey?: string };
+  const { publicKey, secretKey } = req.body as { publicKey?: string; secretKey?: string };
   if (!publicKey) {
     res.status(400).json({ error: "public_key_required" });
     return;
@@ -176,8 +180,30 @@ app.post("/keys", (req, res) => {
     return;
   }
   user.publicKey = publicKey;
+  if (secretKey) {
+    user.secretKey = secretKey;
+  }
   db.saveUser(user);
   res.json({ ok: true });
+});
+
+app.get("/keys/pair", (req, res) => {
+  const token = req.headers.authorization?.replace("Bearer ", "");
+  const userId = token ? verifyToken(token) : null;
+  if (!userId) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const user = db.findUserById(userId);
+  if (!user) {
+    res.status(404).json({ error: "not_found" });
+    return;
+  }
+  if (user.publicKey && user.secretKey) {
+    res.json({ publicKey: user.publicKey, secretKey: user.secretKey });
+  } else {
+    res.json({ publicKey: user.publicKey ?? null, secretKey: null });
+  }
 });
 
 app.get("/messages/:peerId", (req, res) => {
@@ -238,6 +264,17 @@ app.post("/files", upload.single("file"), (req, res) => {
   const fileId = crypto.randomUUID();
   const url = `/uploads/${req.file.filename}`;
   res.json({ fileId, url });
+});
+
+app.delete("/messages/:peerId", (req, res) => {
+  const token = req.headers.authorization?.replace("Bearer ", "");
+  const userId = token ? verifyToken(token) : null;
+  if (!userId) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const count = db.deleteConversation(userId, req.params.peerId);
+  res.json({ ok: true, deleted: count });
 });
 
 const port = Number(process.env.PORT || 4000);

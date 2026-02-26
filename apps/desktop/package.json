@@ -2,39 +2,27 @@
   "name": "@mas/desktop",
   "private": true,
   "type": "module",
-  "main": "electron/main.cjs",
   "scripts": {
-    "dev": "concurrently -k \"vite\" \"wait-on http://localhost:5173 && electron .\"",
-    "build": "vite build && electron-builder",
+    "dev": "vite",
+    "build": "vite build",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@mas/shared": "0.0.1",
-    "libphonenumber-js": "^1.11.1",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "libphonenumber-js": "^1.12.38",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
   },
   "devDependencies": {
-    "@types/node": "^20.11.0",
-    "@types/react": "^18.2.0",
-    "@types/react-dom": "^18.2.0",
-    "@vitejs/plugin-react": "^4.2.0",
-    "concurrently": "^8.2.2",
-    "electron": "^39.2.7",
-    "electron-builder": "^24.9.0",
-    "typescript": "^5.3.3",
-    "vite": "^7.3.1",
-    "wait-on": "^7.2.0"
-  },
-  "build": {
-    "appId": "com.mas.secure",
-    "productName": "MAS Secure Messenger",
-    "files": [
-      "dist/**",
-      "electron/**"
-    ],
-    "directories": {
-      "buildResources": "build"
-    }
+    "@tauri-apps/api": "^2.5.0",
+    "@tauri-apps/cli": "^2.5.0",
+    "@types/node": "^25.3.1",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.4",
+    "typescript": "^5.8.3",
+    "vite": "^7.3.1"
   }
 }

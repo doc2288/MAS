@@ -1,277 +1,167 @@
 {
   "users": [
     {
-      "id": "c8cb728f-502a-4480-bc66-2a51493f32ea",
-      "phone": "+380683481884",
-      "createdAt": "2026-01-15T10:08:11.496Z",
-      "publicKey": "TyhJXZVWpxyi7h3idl6GiUy2UwfYtGgUwE/UmHTUMEA=",
-      "status": "ля"
+      "id": "88086ab2-e096-4ae2-8080-ec2a8795e9b3",
+      "phone": "+12025559999",
+      "createdAt": "2026-02-25T21:22:54.620Z",
+      "login": "testuser2",
+      "publicKey": "jYEjJv/QIB9wDFmmaKA2ft+Q5HeKIo72sK4x4QOpZ18=",
+      "secretKey": "Q+YhcRR3WizCUbDAp3ACgVBsEIyi4W90PY7foSOWaHk="
     },
     {
-      "id": "59a6596e-1deb-4593-b887-f66d8b251076",
-      "phone": "96704429",
-      "createdAt": "2026-01-15T10:09:29.349Z",
-      "publicKey": "ZbYaux27Togs1ez6bE3DbMJf/UCRwvyL86Fkzi2HkFc="
-    },
-    {
-      "id": "5c807849-1fd9-419e-8a7f-252155c33e51",
-      "phone": "+4796704429",
-      "createdAt": "2026-01-15T11:46:26.313Z",
-      "publicKey": "ZbYaux27Togs1ez6bE3DbMJf/UCRwvyL86Fkzi2HkFc=",
-      "login": "doc_228"
+      "id": "466955df-2f36-417c-b1b1-aa4a81d0fe5e",
+      "phone": "+12025551234",
+      "createdAt": "2026-02-25T21:27:13.551Z",
+      "login": "testuser1",
+      "publicKey": "test123",
+      "secretKey": "test456"
     }
   ],
   "messages": [
     {
-      "id": "44e3640d-2079-4a1e-ab6e-408063235feb",
-      "to": "5c807849-1fd9-419e-8a7f-252155c33e51",
-      "createdAt": "2026-01-15T12:33:20.269Z",
+      "id": "28c1c739-b497-48d3-9c18-aee338840f2f",
+      "to": "88086ab2-e096-4ae2-8080-ec2a8795e9b3",
+      "createdAt": "2026-02-25T21:30:06.246Z",
       "contentType": "text",
-      "nonce": "TgbsmszCjrMgf872Qn9wu7qlrBn56Zb0",
-      "ciphertext": "Y4FQlnY5qPDF7RM2cytxBcUc9RCHNXQvSN4=",
-      "senderPublicKey": "TyhJXZVWpxyi7h3idl6GiUy2UwfYtGgUwE/UmHTUMEA=",
-      "from": "c8cb728f-502a-4480-bc66-2a51493f32ea",
-      "readAt": "2026-01-15T13:27:14.648Z",
-      "deliveredAt": "2026-01-15T13:27:14.648Z"
+      "nonce": "gZt/xYw/cjbpEox164+0SoJHlNSiWtiL",
+      "ciphertext": "iY+leeG3+fetSZ5ojI1r/idoJDmuN39Xire3wnWb1DvbWyQMfJRU256CiWE60fvR62975DukA5Srzpj5mo30Dzr7uGOuFhgdBOboVe4H",
+      "senderPublicKey": "a2vNefkZTZVaftD/uekVLFw/U1tdFY+3zjpT1E+bqyE=",
+      "selfNonce": "TOJeSJh568Rh4O0FKY/cbIfyGyOtVp88",
+      "selfCiphertext": "LpMQq+eLN55azaqDgPpsJ+G8FCV343KTBR+JQIbpVv9AqA8/H8Vgc7wbUKAAkwmvSRBP8UILPbLvssHAt4TJ5JqjDyYW49szQlmQRZay",
+      "from": "466955df-2f36-417c-b1b1-aa4a81d0fe5e"
     },
     {
-      "id": "e62ab82a-4f79-4128-873c-952d17cf4073",
-      "to": "5c807849-1fd9-419e-8a7f-252155c33e51",
-      "createdAt": "2026-01-15T12:33:27.067Z",
+      "id": "edfb7a54-2fbd-4e5e-a1ef-7fb9bc87fa76",
+      "to": "88086ab2-e096-4ae2-8080-ec2a8795e9b3",
+      "createdAt": "2026-02-25T21:30:26.954Z",
       "contentType": "text",
-      "nonce": "BDbmd9I2YZp70dOB8m+UMHGJntaxfGTO",
-      "ciphertext": "q3yzc9/FFsQjKcSQv15xZMO8OHKVNRSPFCaorXsqrlh7",
-      "senderPublicKey": "TyhJXZVWpxyi7h3idl6GiUy2UwfYtGgUwE/UmHTUMEA=",
-      "from": "c8cb728f-502a-4480-bc66-2a51493f32ea",
-      "readAt": "2026-01-15T13:27:14.648Z",
-      "deliveredAt": "2026-01-15T13:27:14.648Z"
+      "nonce": "BtkJzYDBuhpp9QG/kCE8tVkT8kuR/G9l",
+      "ciphertext": "FRNDz2kZ49r+CgL+OSTmMMj7Uu9NN2tKFVqFU21JHuaRAG7eFU65kS8L7cCTs7+i5o8AQ/dV028=",
+      "senderPublicKey": "a2vNefkZTZVaftD/uekVLFw/U1tdFY+3zjpT1E+bqyE=",
+      "selfNonce": "mm0xOgn4MP5I/Q3mhlZwBvERtdZxSU0K",
+      "selfCiphertext": "wR8yJP5adBsPsBKw7QWzwY+lsvYPPGumA8ojsDrIFIfDH2mfSI6/KEEtot5nPWFMdkX4P9zr7RM=",
+      "from": "466955df-2f36-417c-b1b1-aa4a81d0fe5e"
     },
     {
-      "id": "404a7956-b1fe-469c-8022-8962d5bd57c6",
-      "to": "c8cb728f-502a-4480-bc66-2a51493f32ea",
-      "createdAt": "2026-01-15T12:38:16.790Z",
-      "contentType": "text",
-      "nonce": "Bb4XWuXGlNORpWroEkNfIhf2cYqMIu9N",
-      "ciphertext": "UsSSSeEuT4BfpRGgegWqflvK+/ndQ/MCpivYtZg96TI5NQ==",
-      "senderPublicKey": "ZbYaux27Togs1ez6bE3DbMJf/UCRwvyL86Fkzi2HkFc=",
-      "from": "5c807849-1fd9-419e-8a7f-252155c33e51",
-      "readAt": "2026-01-15T13:42:24.960Z",
-      "deliveredAt": "2026-01-15T13:42:24.960Z"
-    },
-    {
-      "id": "e94035ac-9ad7-48b7-8fe6-a411d8a1679c",
-      "to": "c8cb728f-502a-4480-bc66-2a51493f32ea",
-      "createdAt": "2026-01-15T12:38:37.815Z",
-      "contentType": "text",
-      "nonce": "d709s90c+Zt8wnoxUkoMNSb0eTmjoE2j",
-      "ciphertext": "9OPgn4ed757vS5CMa81Z58NTaFOr716iGc02tyJNkFnOLA==",
-      "senderPublicKey": "ZbYaux27Togs1ez6bE3DbMJf/UCRwvyL86Fkzi2HkFc=",
-      "from": "5c807849-1fd9-419e-8a7f-252155c33e51",
-      "readAt": "2026-01-15T13:42:24.960Z",
-      "deliveredAt": "2026-01-15T13:42:24.960Z"
-    },
-    {
-      "id": "2e603376-de05-4ccf-82b3-e9f27a599326",
-      "to": "c8cb728f-502a-4480-bc66-2a51493f32ea",
-      "createdAt": "2026-01-15T12:54:54.411Z",
-      "contentType": "text",
-      "nonce": "4P4ZUKL/gqUAR3T6ypxekGsBn4mwAuHP",
-      "ciphertext": "vMI1BvJvC9f+YhyEdofmCc6vS30qZ5V2siz1PC+y",
-      "senderPublicKey": "ZbYaux27Togs1ez6bE3DbMJf/UCRwvyL86Fkzi2HkFc=",
-      "selfNonce": "OZCEhWt2ZkabgGW88d9wchLF0VMkR/SV",
-      "selfCiphertext": "73paBNNVBow/iu2hJDaw314v0FD2D8cnpxuMLxaC",
-      "from": "5c807849-1fd9-419e-8a7f-252155c33e51",
-      "readAt": "2026-01-15T13:42:24.960Z",
-      "deliveredAt": "2026-01-15T13:42:24.960Z"
-    },
-    {
-      "id": "8ca44dad-5d91-4309-a7fa-76850f2eb262",
-      "to": "c8cb728f-502a-4480-bc66-2a51493f32ea",
-      "createdAt": "2026-01-15T12:54:55.306Z",
-      "contentType": "text",
-      "nonce": "Sbrfnqmm0BfhORWVcVbgH6JVqSZ14u7Y",
-      "ciphertext": "3AY/UkrOEQMJdxYsbC/Ay6sQWoXBA9tD3jc=",
-      "senderPublicKey": "ZbYaux27Togs1ez6bE3DbMJf/UCRwvyL86Fkzi2HkFc=",
-      "selfNonce": "NG3nfQq3WeVYaaL68Qi61RhHPM+ZMqRh",
-      "selfCiphertext": "TSfTej+eVOUWJKRyGWFDudBz9Wd9AwldOHA=",
-      "from": "5c807849-1fd9-419e-8a7f-252155c33e51",
-      "readAt": "2026-01-15T13:42:24.960Z",
-      "deliveredAt": "2026-01-15T13:42:24.960Z"
-    },
-    {
-      "id": "0c77f458-b42c-433b-a56b-d338848f634f",
-      "to": "c8cb728f-502a-4480-bc66-2a51493f32ea",
-      "createdAt": "2026-01-15T12:54:55.770Z",
-      "contentType": "text",
-      "nonce": "FoSAYC0pq2tHrRMb/CmZyr9sG8dOSQJ0",
-      "ciphertext": "3DkWz1LxPCns+i0WUJ2Dl4asxnGMrw==",
-      "senderPublicKey": "ZbYaux27Togs1ez6bE3DbMJf/UCRwvyL86Fkzi2HkFc=",
-      "selfNonce": "3SmSNom5RC55w+UnzBkRlAiFkFJlfZBn",
-      "selfCiphertext": "fsHrA0+WNy7TvvXbzLsSGDuV9s54sA==",
-      "from": "5c807849-1fd9-419e-8a7f-252155c33e51",
-      "readAt": "2026-01-15T13:42:24.960Z",
-      "deliveredAt": "2026-01-15T13:42:24.960Z"
-    },
-    {
-      "id": "e9b7490a-28e6-49bc-94a5-91debacfb26c",
-      "to": "c8cb728f-502a-4480-bc66-2a51493f32ea",
-      "createdAt": "2026-01-15T12:54:55.979Z",
-      "contentType": "text",
-      "nonce": "xCC031k50PORoyE9GdonDkzf9VmmMFZ1",
-      "ciphertext": "xJtBjo069s/G0b2jjd9/N43pmIpvgA==",
-      "senderPublicKey": "ZbYaux27Togs1ez6bE3DbMJf/UCRwvyL86Fkzi2HkFc=",
-      "selfNonce": "OJayoLnTCNOdPYqiVPmxGXaklH5iD9cU",
-      "selfCiphertext": "3eQBtgfWF31f9zfIc13I8iiWdvhr4Q==",
-      "from": "5c807849-1fd9-419e-8a7f-252155c33e51",
-      "readAt": "2026-01-15T13:42:24.960Z",
-      "deliveredAt": "2026-01-15T13:42:24.960Z"
-    },
-    {
-      "id": "746e98db-1c24-4bee-9a32-02c511f330e9",
-      "to": "c8cb728f-502a-4480-bc66-2a51493f32ea",
-      "createdAt": "2026-01-15T12:54:56.331Z",
-      "contentType": "text",
-      "nonce": "Nc7L2xSX6SHOeHGRiuauWV9aetzh34hk",
-      "ciphertext": "unWNOmGTH6whCwbFWGR/mFMI",
-      "senderPublicKey": "ZbYaux27Togs1ez6bE3DbMJf/UCRwvyL86Fkzi2HkFc=",
-      "selfNonce": "Ul9yFWRR/lCY5eJCbI9xYjRGpVH6QDVW",
-      "selfCiphertext": "Evfyvs2LhJCshEq2MZ1QU/uo",
-      "from": "5c807849-1fd9-419e-8a7f-252155c33e51",
-      "readAt": "2026-01-15T13:42:24.960Z",
-      "deliveredAt": "2026-01-15T13:42:24.960Z"
-    },
-    {
-      "id": "56d5b1f0-386a-4c89-8403-22670b749e5d",
-      "to": "c8cb728f-502a-4480-bc66-2a51493f32ea",
-      "createdAt": "2026-01-15T12:54:56.669Z",
-      "contentType": "text",
-      "nonce": "8jr9RbZG4nU+GQDIyeqNqie/YYCXjqSm",
-      "ciphertext": "rRUgFIFnlrC2CxIgd1atJyxAasVrWcPx",
-      "senderPublicKey": "ZbYaux27Togs1ez6bE3DbMJf/UCRwvyL86Fkzi2HkFc=",
-      "selfNonce": "RWCGgn+vTcjdxOZlsYIWZp7t6txm1N02",
-      "selfCiphertext": "OT3yzgknRMlsHF2MdzQ0z3Iw/8CV49gx",
-      "from": "5c807849-1fd9-419e-8a7f-252155c33e51",
-      "readAt": "2026-01-15T13:42:24.960Z",
-      "deliveredAt": "2026-01-15T13:42:24.960Z"
-    },
-    {
-      "id": "e791fa0c-5dad-4205-b6ec-80af6c989671",
-      "to": "c8cb728f-502a-4480-bc66-2a51493f32ea",
-      "createdAt": "2026-01-15T12:54:56.843Z",
-      "contentType": "text",
-      "nonce": "WOi8evjCZzaeT93Miq6UkL5k+lpL+q7u",
-      "ciphertext": "fhh4kqueO3zCPDuGKzHOZ0gkQEA=",
-      "senderPublicKey": "ZbYaux27Togs1ez6bE3DbMJf/UCRwvyL86Fkzi2HkFc=",
-      "selfNonce": "U8rK/kzvOeiLXDYcjPdKvNddwe6ki8VK",
-      "selfCiphertext": "BbRBSemU790M5LwCPZ+YSBstBMU=",
-      "from": "5c807849-1fd9-419e-8a7f-252155c33e51",
-      "readAt": "2026-01-15T13:42:24.960Z",
-      "deliveredAt": "2026-01-15T13:42:24.960Z"
-    },
-    {
-      "id": "cf3aa0eb-af84-4a98-b5c4-835d452649bd",
-      "to": "c8cb728f-502a-4480-bc66-2a51493f32ea",
-      "createdAt": "2026-01-15T12:54:57.005Z",
-      "contentType": "text",
-      "nonce": "bWofsMRooGtC2unOOponBnrJ3Ffqikfb",
-      "ciphertext": "Aula2QR97NRyRvxsPkXq7kJYr1nUpQ==",
-      "senderPublicKey": "ZbYaux27Togs1ez6bE3DbMJf/UCRwvyL86Fkzi2HkFc=",
-      "selfNonce": "4PNWtqyU6shgyP9o5hqOxfadGDDXHfKh",
-      "selfCiphertext": "8TMrDFlUbJ/oStd2hZnL+kgzpyrEpA==",
-      "from": "5c807849-1fd9-419e-8a7f-252155c33e51",
-      "readAt": "2026-01-15T13:42:24.960Z",
-      "deliveredAt": "2026-01-15T13:42:24.960Z"
-    },
-    {
-      "id": "665775c5-0c24-4bfd-b4f5-d556098b7759",
-      "to": "c8cb728f-502a-4480-bc66-2a51493f32ea",
-      "createdAt": "2026-01-15T12:54:57.197Z",
-      "contentType": "text",
-      "nonce": "HX7YfmiB1y2BTQZhw2i4DYCRxpyfCrzV",
-      "ciphertext": "RzLNzM3DK4dDGCIlR4MbNlIThuc=",
-      "senderPublicKey": "ZbYaux27Togs1ez6bE3DbMJf/UCRwvyL86Fkzi2HkFc=",
-      "selfNonce": "nSWbJNiNIHuztVrUmBfmNY7KecrkQAlN",
-      "selfCiphertext": "y2uLv40muyQEPYVtBAjZaaXXiVs=",
-      "from": "5c807849-1fd9-419e-8a7f-252155c33e51",
-      "readAt": "2026-01-15T13:42:24.960Z",
-      "deliveredAt": "2026-01-15T13:42:24.960Z"
-    },
-    {
-      "id": "746f2a92-dc24-4263-be72-d9ba255d9fb2",
-      "to": "c8cb728f-502a-4480-bc66-2a51493f32ea",
-      "createdAt": "2026-01-15T12:54:57.355Z",
-      "contentType": "text",
-      "nonce": "BLEI34ohpy6ePL4HpzyD74Zvh/uNqZfw",
-      "ciphertext": "AXPna9CGAtXUOjz31UG2i46X",
-      "senderPublicKey": "ZbYaux27Togs1ez6bE3DbMJf/UCRwvyL86Fkzi2HkFc=",
-      "selfNonce": "Zqf22Enye3LbUEJYQLI/+6C00eInsiFt",
-      "selfCiphertext": "Hb2Nmu9DpRGhV5zJh4Hs9c3j",
-      "from": "5c807849-1fd9-419e-8a7f-252155c33e51",
-      "readAt": "2026-01-15T13:42:24.960Z",
-      "deliveredAt": "2026-01-15T13:42:24.960Z"
-    },
-    {
-      "id": "4e6de660-70ae-49ac-92ea-d642e47369c4",
-      "to": "c8cb728f-502a-4480-bc66-2a51493f32ea",
-      "createdAt": "2026-01-15T12:54:57.659Z",
-      "contentType": "text",
-      "nonce": "X8qIUsqJehpC/54ABk6//x4os6fMlOoL",
-      "ciphertext": "LMAi43InzLefLPTZk+yEYwS1rKwNlA==",
-      "senderPublicKey": "ZbYaux27Togs1ez6bE3DbMJf/UCRwvyL86Fkzi2HkFc=",
-      "selfNonce": "QwZuBLxAyMI81u+754o4ucaMDzFuZ+Fg",
-      "selfCiphertext": "j+vX8qMw59I5nnauh/cOeh8x399TlA==",
-      "from": "5c807849-1fd9-419e-8a7f-252155c33e51",
-      "readAt": "2026-01-15T13:42:24.960Z",
-      "deliveredAt": "2026-01-15T13:42:24.960Z"
-    },
-    {
-      "id": "c91f3bd9-6357-44ad-9493-4bf4d69458ac",
-      "to": "5c807849-1fd9-419e-8a7f-252155c33e51",
-      "createdAt": "2026-01-15T13:06:48.782Z",
-      "contentType": "text",
-      "nonce": "UB+MrJp6yPSb9UOxUcDTntWXwNERITfM",
-      "ciphertext": "pePvfEDsB4FlRWIQXMxy+xbm7D6q5wInjCA=",
-      "senderPublicKey": "TyhJXZVWpxyi7h3idl6GiUy2UwfYtGgUwE/UmHTUMEA=",
-      "selfNonce": "IA8T4lzW0fHkSG5xVeUUN1RI3VpnTVrL",
-      "selfCiphertext": "dUG51i6/icswtpgi0QeCAjUTMv79UpzEMNU=",
-      "from": "c8cb728f-502a-4480-bc66-2a51493f32ea",
-      "deliveredAt": "2026-01-15T13:27:14.648Z",
-      "readAt": "2026-01-15T13:27:14.648Z"
-    },
-    {
-      "id": "e8c6eb08-7c70-4473-826b-6ada5de1dbe1",
-      "to": "c8cb728f-502a-4480-bc66-2a51493f32ea",
-      "createdAt": "2026-01-15T13:23:42.774Z",
-      "contentType": "text",
-      "nonce": "Q+xFsorbKw7CsW3zxgl+D/ZgvOUpW6e3",
-      "ciphertext": "35L77exLiJxO5TJPeZv7b2PIl+J2/SqqboQ+zNAND39QYt4=",
-      "senderPublicKey": "ZbYaux27Togs1ez6bE3DbMJf/UCRwvyL86Fkzi2HkFc=",
-      "selfNonce": "/BC1JKjtux9Y+01ARHhkp+E2kBXlsOcG",
-      "selfCiphertext": "N0xRwyoOGev6U8CsZ3lxoYOGhJYAqsyx9MPazbVkm09ymWE=",
-      "from": "5c807849-1fd9-419e-8a7f-252155c33e51",
-      "deliveredAt": "2026-01-15T13:42:24.960Z",
-      "readAt": "2026-01-15T13:42:24.960Z"
-    },
-    {
-      "id": "ac444e02-5d82-4fff-b405-b6a5a510cef8",
-      "to": "5c807849-1fd9-419e-8a7f-252155c33e51",
-      "createdAt": "2026-01-15T13:26:55.571Z",
+      "id": "3d3126a9-20b5-40cf-957a-a99eb8d3196c",
+      "to": "88086ab2-e096-4ae2-8080-ec2a8795e9b3",
+      "createdAt": "2026-02-25T21:52:08.895Z",
       "contentType": "file",
-      "nonce": "Cb7O0hdqIxPwwJaNCEPPl5EWjLe9LPD4",
-      "ciphertext": "54wUJO0tFpApEEDeJ33tew==",
-      "senderPublicKey": "TyhJXZVWpxyi7h3idl6GiUy2UwfYtGgUwE/UmHTUMEA=",
-      "selfNonce": "bt79PZJPtz53LDYUKeTeyS+UeIn61F6O",
-      "selfCiphertext": "41XV5L7LR/nQs4SF83Utew==",
+      "nonce": "pOsknRPN0hsyOVeTFmjMUrKaZEugBCxQ",
+      "ciphertext": "iOFOGHtNiFCT6XagIPvu/w==",
+      "senderPublicKey": "a2vNefkZTZVaftD/uekVLFw/U1tdFY+3zjpT1E+bqyE=",
+      "selfNonce": "f9BfNLbE2tzFZiDAW4eO/R4x2AeXXOv6",
+      "selfCiphertext": "cPD9RJR1rx5K6pGa2AcAFQ==",
       "meta": {
-        "fileName": "Знімок екрана 2026-01-15 121740.png",
-        "fileType": "image/png",
-        "fileUrl": "http://localhost:4000/uploads/0a92a45b1f9e8483e1695f93d8bfd7e4",
-        "nonce": "9uZi77OEykbGyM0t3qoL/399KncnO/am",
-        "localUrl": "blob:http://localhost:5173/b8de07ea-3252-40df-a2ba-fae20c8ec6f6"
+        "fileName": "package.json",
+        "fileType": "application/json",
+        "fileUrl": "http://localhost:4000/uploads/d97c9534daac1dfd83bdfa9ff566ebe3",
+        "nonce": "gHT2ClAMLLFY7VB4qHI9hyDai+x1qpXb",
+        "localUrl": "blob:http://localhost:5173/1cc24114-4d64-4c93-8c52-582068a0db95"
       },
-      "from": "c8cb728f-502a-4480-bc66-2a51493f32ea",
-      "deliveredAt": "2026-01-15T13:27:14.648Z",
-      "readAt": "2026-01-15T13:27:14.648Z"
+      "from": "466955df-2f36-417c-b1b1-aa4a81d0fe5e"
+    },
+    {
+      "id": "1a4ddc92-877d-4daa-b621-1d6dee8053b2",
+      "to": "88086ab2-e096-4ae2-8080-ec2a8795e9b3",
+      "createdAt": "2026-02-25T22:04:17.224Z",
+      "contentType": "text",
+      "nonce": "/K2O3WEa7j/vI14UZoq+p/qFPlNvLvMS",
+      "ciphertext": "s37rnEImjvgxJP2yDKh5Y5J6OrBP0nEqX8hYS8yjB8cmIUvFo3H/wMwK6eod7ZiGr5NmhdsM4z9BOI/CFxpwMDocrCC2",
+      "senderPublicKey": "a2vNefkZTZVaftD/uekVLFw/U1tdFY+3zjpT1E+bqyE=",
+      "selfNonce": "NqzLG8sWIwahvoshLwvYOWisTR55eAxB",
+      "selfCiphertext": "43iAx1o+UWK6Gw6Hi4abGlsU4hBWDB2ZPH/B/pFycrntbp5L4JX/PhQsnAxpiHhfdFP+65E4TIMRnJbtLaEOpwp/fg+/",
+      "from": "466955df-2f36-417c-b1b1-aa4a81d0fe5e",
+      "reactions": {
+        "❤️": [
+          "466955df-2f36-417c-b1b1-aa4a81d0fe5e"
+        ]
+      }
+    },
+    {
+      "id": "93b47e79-d222-406c-a2e6-46a00b6371aa",
+      "to": "88086ab2-e096-4ae2-8080-ec2a8795e9b3",
+      "createdAt": "2026-02-25T22:04:30.133Z",
+      "contentType": "text",
+      "nonce": "s50hx0Y9P1tuRRREd+iIb9ycVllyVfj/",
+      "ciphertext": "6wykJhXUlTxN49QJJ/HTPL2hLNugImHpVxgvoymVeW13Ad72mCWtSm7/3wxSM79VU6BfkAWo/7fDmgGkQBdiA3gHdQ==",
+      "senderPublicKey": "a2vNefkZTZVaftD/uekVLFw/U1tdFY+3zjpT1E+bqyE=",
+      "selfNonce": "uVfeRupUvmxYUN+4DIYyb9zZLy+LOQPZ",
+      "selfCiphertext": "HdmoAYtA4YEDIczLILoAtGN/T02x4rVoAd2dahOKcit6U5oUHq5YvpV3GxTGwrX+jkyIC2oclUhxJAIXYjWryzuvhA==",
+      "from": "466955df-2f36-417c-b1b1-aa4a81d0fe5e",
+      "editedAt": "2026-02-25T22:07:03.966Z"
+    },
+    {
+      "id": "fe1fe21b-97ae-4ca7-8109-e54d9b4fe907",
+      "to": "88086ab2-e096-4ae2-8080-ec2a8795e9b3",
+      "createdAt": "2026-02-25T22:04:42.103Z",
+      "contentType": "text",
+      "nonce": "IteeXsndxS7Zzcz6zeUj+xJYqlYTAz3v",
+      "ciphertext": "Xs/+a2pke7XfT5QX9hBxT2AQbooYbYW70/AnCbUMqrnxPlhVw2xOSLSH4r4ucMx2SNoY",
+      "senderPublicKey": "a2vNefkZTZVaftD/uekVLFw/U1tdFY+3zjpT1E+bqyE=",
+      "selfNonce": "tcrBNwj5JQcgILtdH22vGg+GOyQfYi6e",
+      "selfCiphertext": "MUgn6X8/TEocAZwGqM7FR5ZQkCEOj003WkUAEMpvulRsBDOjhVsFusCKmfCAPomchB4J",
+      "from": "466955df-2f36-417c-b1b1-aa4a81d0fe5e"
+    },
+    {
+      "id": "d5649dc1-3016-4346-b7e1-de8e2e55e273",
+      "to": "88086ab2-e096-4ae2-8080-ec2a8795e9b3",
+      "createdAt": "2026-02-25T22:05:45.030Z",
+      "contentType": "text",
+      "nonce": "R7pwA4+YL7WfI3pKNLclLnlcn9F2X8hu",
+      "ciphertext": "dvIYyjjcK67xP5s4Mb0ijj8OWajgV1Ltdy4nyfD7ScACor1hodyOO3BO7IuyUkGKdi5XUhmLZhDwg1ivssVZirLD5yPpZYtQEaOPwPY=",
+      "senderPublicKey": "a2vNefkZTZVaftD/uekVLFw/U1tdFY+3zjpT1E+bqyE=",
+      "selfNonce": "wTnhq1sfd0VQNPdWcGCj1J067IuksEVo",
+      "selfCiphertext": "mJ6CFsHoUCtJ+uxwSGnC12EHj6ExHAyGA+sGbte+QsvLwx9nStNpzsMl8iLbSwp6nt6AQ/Tatbio51jkIVeFCFB+ZzMHPVQr+wwQQ4o=",
+      "replyToId": "1a4ddc92-877d-4daa-b621-1d6dee8053b2",
+      "from": "466955df-2f36-417c-b1b1-aa4a81d0fe5e",
+      "reactions": {
+        "👍": [
+          "466955df-2f36-417c-b1b1-aa4a81d0fe5e"
+        ]
+      }
+    },
+    {
+      "id": "300a485d-4fe9-47a4-ace5-b40c6986cbb9",
+      "to": "88086ab2-e096-4ae2-8080-ec2a8795e9b3",
+      "createdAt": "2026-02-26T08:06:11.631Z",
+      "contentType": "text",
+      "nonce": "dg8q/76uAcGUeEXBbb9Fdrml8zpOjNuy",
+      "ciphertext": "2DnKRzo1gfpd33yZEk54AwEVhPfYMvOCDtEwSVb6fyRU+G1aJg4qz/s=",
+      "senderPublicKey": "a2vNefkZTZVaftD/uekVLFw/U1tdFY+3zjpT1E+bqyE=",
+      "selfNonce": "1xgGTsZ4S+A84VZqPUU7qmwzheH7EQez",
+      "selfCiphertext": "V/JVkXpI3+OCHp0lhybjQl9uBaeCHSvwrHjMmXasCcz7ZSC/pdxYYS8=",
+      "from": "466955df-2f36-417c-b1b1-aa4a81d0fe5e",
+      "reactions": {
+        "🔥": [
+          "466955df-2f36-417c-b1b1-aa4a81d0fe5e"
+        ]
+      }
+    },
+    {
+      "id": "f268427e-aa67-410d-87e0-50bf29078e76",
+      "to": "88086ab2-e096-4ae2-8080-ec2a8795e9b3",
+      "createdAt": "2026-02-26T08:15:51.910Z",
+      "contentType": "text",
+      "nonce": "kv2fEOQBu94KA0hzvIAEC15vqCqZZRHS",
+      "ciphertext": "dacIETiZ+jVyqSQqyGD4XqhqD9A=",
+      "senderPublicKey": "a2vNefkZTZVaftD/uekVLFw/U1tdFY+3zjpT1E+bqyE=",
+      "selfNonce": "xhqiSc0feqB2Tp2GiC/1fVGfumdxX2An",
+      "selfCiphertext": "DfJUA3JLPjOc/8kn4Pbc/SC+DN4=",
+      "from": "466955df-2f36-417c-b1b1-aa4a81d0fe5e"
+    },
+    {
+      "id": "dd59973d-a0be-4ece-a346-c9dfad40e98b",
+      "to": "88086ab2-e096-4ae2-8080-ec2a8795e9b3",
+      "createdAt": "2026-02-26T08:17:46.989Z",
+      "contentType": "text",
+      "nonce": "2qw/TANUHsXV8ETqh1rRQHpb9ReHk/qO",
+      "ciphertext": "dLU1bxKrIeJtuXNDVS93/7T4L5pMSHy3844D8RdmyMLFrJI=",
+      "senderPublicKey": "a2vNefkZTZVaftD/uekVLFw/U1tdFY+3zjpT1E+bqyE=",
+      "selfNonce": "4xpVj2VHLHG8rrhI42Y/+BZSGrCyXoxu",
+      "selfCiphertext": "rekVqN+lhuV3Ljs3cFEfQAaOaAhJYOWlhHygIfoTzlGOUqk=",
+      "replyToId": "d5649dc1-3016-4346-b7e1-de8e2e55e273",
+      "from": "466955df-2f36-417c-b1b1-aa4a81d0fe5e"
     }
   ]
 }
