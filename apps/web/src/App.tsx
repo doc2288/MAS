@@ -972,7 +972,7 @@ export default function App() {
             <svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
             <span class="btn-label">Мікрофон</span>
           </button>
-          <button class="btn btn-default" id="camBtn" title="Камера" style="display:none">
+          <button class="btn btn-default" id="camBtn" title="Камера">
             <svg viewBox="0 0 24 24"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
             <span class="btn-label">Камера</span>
           </button>
@@ -1063,19 +1063,63 @@ export default function App() {
     }
   };
 
-  const toggleCamera = () => {
+  const toggleCamera = async () => {
+    const pc = callRef.current.pc;
     const stream = callRef.current.localStream;
-    if (!stream) return;
-    const track = stream.getVideoTracks()[0];
-    if (!track) return;
-    track.enabled = !track.enabled;
+    if (!pc || !stream) return;
+    const existingTrack = stream.getVideoTracks()[0];
+
+    if (existingTrack) {
+      existingTrack.enabled = !existingTrack.enabled;
+      const parts = callWindowPartsRef.current;
+      if (parts?.camBtn) parts.camBtn.className = existingTrack.enabled ? "btn btn-default" : "btn btn-active";
+      if (parts?.localVideo) parts.localVideo.style.opacity = existingTrack.enabled ? "1" : "0.3";
+      return;
+    }
+
+    try {
+      const camStream = await navigator.mediaDevices.getUserMedia({ video: true });
+      const camTrack = camStream.getVideoTracks()[0];
+      stream.addTrack(camTrack);
+      pc.addTrack(camTrack, stream);
+
+      if (pc.signalingState !== "closed") {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        const targetId = peerRef.current?.id ?? callRef.current.callerId;
+        if (targetId && wsRef.current?.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify({
+            type: "call.offer",
+            payload: { to: targetId, offer: pc.localDescription, isVideo: true, renegotiate: true }
+          }));
+        }
+      }
+
+      setCall((prev) => ({ ...prev, isVideo: true, localStream: stream }));
+      const parts = callWindowPartsRef.current;
+      if (parts?.camBtn) parts.camBtn.className = "btn btn-default";
+      if (parts?.localVideo) {
+        parts.localVideo.srcObject = stream;
+        parts.localVideo.style.display = "block";
+        parts.localVideo.style.opacity = "1";
+      }
+      switchCallWindowToVideo();
+    } catch {
+      setStatus("Не вдалося увімкнути камеру.");
+    }
+  };
+
+  const switchCallWindowToVideo = () => {
+    const win = callWindowRef.current;
+    if (!win) return;
     const parts = callWindowPartsRef.current;
-    if (parts?.camBtn) {
-      parts.camBtn.className = track.enabled ? "btn btn-default" : "btn btn-active";
-    }
-    if (parts?.localVideo) {
-      parts.localVideo.style.opacity = track.enabled ? "1" : "0.3";
-    }
+    if (parts?.label) parts.label.textContent = "ВІДЕОДЗВІНОК";
+    if (parts?.remoteVideo) parts.remoteVideo.style.display = "block";
+    if (parts?.localVideo) parts.localVideo.style.display = "block";
+    const wrap = win.document.getElementById("callWrap");
+    const centerArea = win.document.getElementById("centerArea");
+    wrap?.classList.add("video-overlay");
+    if (centerArea) centerArea.style.display = "none";
   };
 
   const stopScreenShare = () => {
@@ -1206,8 +1250,6 @@ export default function App() {
 
     if (parts.remoteVideo) parts.remoteVideo.style.display = isVideo ? "block" : "none";
     if (parts.localVideo) parts.localVideo.style.display = isVideo ? "block" : "none";
-
-    if (parts.camBtn) (parts.camBtn as HTMLElement).style.display = isVideo ? "flex" : "none";
 
     const wrap = win?.document.getElementById("callWrap");
     const centerArea = win?.document.getElementById("centerArea");
