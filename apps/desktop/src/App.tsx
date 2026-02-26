@@ -168,6 +168,7 @@ export default function App() {
     camBtn?: HTMLButtonElement;
     fullscreenBtn?: HTMLButtonElement;
     timerInterval?: number;
+    timerStartTime?: number;
   } | null>(null);
   const toneCtxRef = useRef<AudioContext | null>(null);
   const toneOscRef = useRef<OscillatorNode | null>(null);
@@ -949,7 +950,7 @@ export default function App() {
         <div class="bg"></div>
         <div class="top">
           <div class="type" id="callLabel">Дзвінок</div>
-          <div class="peer-name" id="peerName">${peerDisplay}</div>
+          <div class="peer-name" id="peerName"></div>
           <div class="call-status" id="statusLabel"><span class="dot"></span><span id="statusText">З'єднання…</span></div>
           <div class="timer" id="timerLabel">00:00</div>
           <div class="screen-indicator" id="screenIndicator" style="display:none">
@@ -959,7 +960,7 @@ export default function App() {
         </div>
         <div class="center" id="centerArea">
           <div class="avatar-wrap">
-            <div class="avatar" id="avatarEl">${peerInitial}</div>
+            <div class="avatar" id="avatarEl"></div>
             <div class="wave-wrap" id="waveWrap">
               <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
             </div>
@@ -990,6 +991,11 @@ export default function App() {
           </button>
         </div>
       </div>`;
+
+    const peerNameEl = win.document.getElementById("peerName");
+    const avatarEl = win.document.getElementById("avatarEl");
+    if (peerNameEl) peerNameEl.textContent = peerDisplay;
+    if (avatarEl) avatarEl.textContent = peerInitial;
 
     const $ = (id: string) => win.document.getElementById(id);
     const endButton = $("endCallBtn");
@@ -1026,10 +1032,14 @@ export default function App() {
       win.document.addEventListener("mouseup", () => { dragging = false; localVideo.style.cursor = "grab"; });
     }
 
-    const startTime = Date.now();
     const timerLabel = $("timerLabel") as HTMLDivElement | null;
     const timerInterval = win.setInterval(() => {
-      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      const parts = callWindowPartsRef.current;
+      if (!parts?.timerStartTime) {
+        if (timerLabel) timerLabel.textContent = "00:00";
+        return;
+      }
+      const elapsed = Math.floor((Date.now() - parts.timerStartTime) / 1000);
       const m = String(Math.floor(elapsed / 60)).padStart(2, "0");
       const s = String(elapsed % 60).padStart(2, "0");
       if (timerLabel) timerLabel.textContent = `${m}:${s}`;
@@ -1047,6 +1057,7 @@ export default function App() {
       camBtn: camBtn ?? undefined,
       fullscreenBtn: fullscreenBtn ?? undefined,
       timerInterval,
+      timerStartTime: undefined,
     };
     return win;
   };
@@ -1234,6 +1245,11 @@ export default function App() {
         parts.localVideo.style.borderRadius = ""; parts.localVideo.style.border = "";
         parts.localVideo.style.zIndex = ""; parts.localVideo.style.cursor = "";
       }
+    } else if (!sharing && callRef.current.isVideo) {
+      const parts = callWindowPartsRef.current;
+      if (parts?.localVideo) {
+        parts.localVideo.srcObject = callRef.current.localStream ?? null;
+      }
     }
   };
 
@@ -1263,7 +1279,10 @@ export default function App() {
       if (waveWrap) waveWrap.style.display = "flex";
     }
 
-    if (call.status === "in-call" && parts.statusLabel) parts.statusLabel.textContent = "Активний дзвінок";
+    if (call.status === "in-call") {
+      if (parts.statusLabel) parts.statusLabel.textContent = "Активний дзвінок";
+      if (!parts.timerStartTime) parts.timerStartTime = Date.now();
+    }
     if (call.status === "calling" && parts.statusLabel) parts.statusLabel.textContent = "Виклик…";
   };
 
