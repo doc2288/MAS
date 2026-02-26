@@ -12,14 +12,12 @@
   },
   "dependencies": {
     "@mas/shared": "0.0.1",
-    "electron": "39.2.7",
-    "expo": "^54.0.31",
-    "react": "18.2.0",
-    "react-native": "^0.73.11",
-    "vite": "7.3.1"
+    "expo": "^54.0.33",
+    "react": "18.3.1",
+    "react-native": "^0.73.11"
   },
   "devDependencies": {
-    "@types/react": "^18.2.0",
-    "typescript": "^5.3.3"
+    "@types/react": "^18.3.28",
+    "typescript": "^5.8.3"
   }
 }
