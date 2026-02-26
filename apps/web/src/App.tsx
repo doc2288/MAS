@@ -160,6 +160,14 @@ export default function App() {
     localVideo?: HTMLVideoElement;
     remoteVideo?: HTMLVideoElement;
     label?: HTMLDivElement;
+    peerName?: HTMLDivElement;
+    statusLabel?: HTMLDivElement;
+    timerLabel?: HTMLDivElement;
+    avatar?: HTMLDivElement;
+    micBtn?: HTMLButtonElement;
+    camBtn?: HTMLButtonElement;
+    fullscreenBtn?: HTMLButtonElement;
+    timerInterval?: number;
   } | null>(null);
   const toneCtxRef = useRef<AudioContext | null>(null);
   const toneOscRef = useRef<OscillatorNode | null>(null);
@@ -861,55 +869,245 @@ export default function App() {
 
   
 
-  // -- Call functions with error handling --
+  // -- Call window --
   const renderCallWindow = () => {
     const win = window.open("", "mas-call", "width=480,height=720");
     if (!win) return null;
-    win.document.title = "MAS Call";
+    win.document.title = "MAS — Дзвінок";
+    const peerDisplay = peer?.login ?? peer?.phone ?? "Абонент";
+    const peerInitial = peerDisplay.slice(0, 1).toUpperCase();
+    win.document.head.innerHTML = `
+      <meta charset="UTF-8">
+      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">`;
     win.document.body.innerHTML = `
       <style>
-        body{margin:0;background:#0c0f1a;color:#f4f6fb;font-family:Inter,system-ui,sans-serif}
-        .wrap{display:flex;flex-direction:column;height:100vh}
-        .header{padding:14px 16px;border-bottom:1px solid rgba(255,255,255,0.08)}
-        .label{font-weight:600;letter-spacing:0.04em}
-        .video{flex:1;position:relative;display:grid;place-items:center}
-        #remoteVideo{width:100%;height:100%;object-fit:cover;display:none;background:#111623}
-        #localVideo{position:absolute;right:16px;bottom:16px;width:140px;height:180px;object-fit:cover;border-radius:12px;border:1px solid rgba(255,255,255,0.1);display:none}
-        .audio-only{color:rgba(244,246,251,0.7);font-size:14px}
-        .controls{padding:12px 16px;border-top:1px solid rgba(255,255,255,0.08);display:flex;justify-content:center}
-        .end{background:#ef4444;border:none;color:#fff;padding:10px 16px;border-radius:12px;cursor:pointer}
+        *{box-sizing:border-box;margin:0;padding:0}
+        body{background:#0c0f1a;color:#f4f6fb;font-family:'Inter',system-ui,sans-serif;overflow:hidden;user-select:none}
+        .wrap{display:flex;flex-direction:column;height:100vh;position:relative}
+        .bg{position:absolute;inset:0;z-index:0;overflow:hidden}
+        .bg::before{content:'';position:absolute;width:600px;height:600px;top:-200px;left:-100px;border-radius:50%;background:radial-gradient(circle,rgba(59,130,246,0.15),transparent 70%);animation:drift 12s ease-in-out infinite alternate}
+        .bg::after{content:'';position:absolute;width:500px;height:500px;bottom:-150px;right:-100px;border-radius:50%;background:radial-gradient(circle,rgba(34,211,238,0.1),transparent 70%);animation:drift 10s ease-in-out infinite alternate-reverse}
+        @keyframes drift{0%{transform:translate(0,0)}100%{transform:translate(40px,30px)}}
+        .top{position:relative;z-index:1;padding:24px 20px 16px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:6px}
+        .top .type{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.12em;color:rgba(244,246,251,0.5)}
+        .peer-name{font-size:20px;font-weight:700;letter-spacing:0.02em}
+        .call-status{font-size:13px;color:rgba(244,246,251,0.6);display:flex;align-items:center;gap:6px}
+        .call-status .dot{width:6px;height:6px;border-radius:50%;background:#4ade80;animation:blink 1.5s ease infinite}
+        @keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}
+        .timer{font-size:22px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:0.04em;color:rgba(244,246,251,0.85);margin-top:2px}
+        .center{flex:1;position:relative;z-index:1;display:flex;align-items:center;justify-content:center}
+        .avatar-wrap{display:flex;flex-direction:column;align-items:center;gap:20px}
+        .avatar{width:120px;height:120px;border-radius:50%;background:linear-gradient(135deg,rgba(59,130,246,0.35),rgba(34,211,238,0.25));display:flex;align-items:center;justify-content:center;font-size:48px;font-weight:700;position:relative}
+        .avatar::before{content:'';position:absolute;inset:-8px;border-radius:50%;border:2px solid rgba(59,130,246,0.25);animation:ring 2.5s ease-in-out infinite}
+        .avatar::after{content:'';position:absolute;inset:-16px;border-radius:50%;border:1px solid rgba(34,211,238,0.12);animation:ring 3s ease-in-out infinite 0.5s}
+        @keyframes ring{0%,100%{transform:scale(1);opacity:0.6}50%{transform:scale(1.06);opacity:0.2}}
+        .wave-wrap{display:flex;gap:3px;align-items:flex-end;height:28px}
+        .wave-bar{width:4px;border-radius:2px;background:linear-gradient(to top,#3b82f6,#22d3ee);animation:wave 1.2s ease-in-out infinite}
+        .wave-bar:nth-child(1){height:12px;animation-delay:0s}
+        .wave-bar:nth-child(2){height:20px;animation-delay:0.15s}
+        .wave-bar:nth-child(3){height:16px;animation-delay:0.3s}
+        .wave-bar:nth-child(4){height:24px;animation-delay:0.45s}
+        .wave-bar:nth-child(5){height:14px;animation-delay:0.6s}
+        @keyframes wave{0%,100%{transform:scaleY(0.4)}50%{transform:scaleY(1)}}
+        #remoteVideo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;display:none;background:#111623}
+        #localVideo{position:absolute;right:16px;bottom:16px;width:160px;height:200px;object-fit:cover;border-radius:16px;border:2px solid rgba(255,255,255,0.12);z-index:3;display:none;box-shadow:0 8px 24px rgba(0,0,0,0.4);cursor:grab;transition:box-shadow 0.2s}
+        #localVideo:hover{box-shadow:0 12px 32px rgba(0,0,0,0.6)}
+        .bar{position:relative;z-index:2;padding:16px 24px 28px;display:flex;justify-content:center;gap:16px;background:linear-gradient(to top,rgba(12,15,26,0.85),transparent);backdrop-filter:blur(8px)}
+        .btn{width:56px;height:56px;border-radius:50%;border:none;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:transform 0.15s,background 0.2s,box-shadow 0.2s;position:relative}
+        .btn:hover{transform:scale(1.08)}
+        .btn:active{transform:scale(0.95)}
+        .btn svg{width:22px;height:22px;fill:none;stroke:#f4f6fb;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+        .btn-default{background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.12)}
+        .btn-default:hover{background:rgba(255,255,255,0.16);border-color:rgba(255,255,255,0.2)}
+        .btn-active{background:rgba(245,158,11,0.25);border:1px solid rgba(245,158,11,0.4)}
+        .btn-active svg{stroke:#f59e0b}
+        .btn-active:hover{background:rgba(245,158,11,0.35)}
+        .btn-end{background:#ef4444;border:1px solid rgba(239,68,68,0.6);box-shadow:0 4px 20px rgba(239,68,68,0.3)}
+        .btn-end:hover{background:#dc2626;box-shadow:0 6px 28px rgba(239,68,68,0.4)}
+        .btn-end svg{stroke:#fff}
+        .btn-label{position:absolute;bottom:-20px;left:50%;transform:translateX(-50%);font-size:10px;color:rgba(244,246,251,0.5);white-space:nowrap;letter-spacing:0.04em;font-weight:500}
+        .video-overlay .top{background:linear-gradient(to bottom,rgba(12,15,26,0.7),transparent);position:absolute;top:0;left:0;right:0;z-index:2}
+        .video-overlay .bar{position:absolute;bottom:0;left:0;right:0;z-index:2}
+        .video-overlay .center{display:none}
       </style>
-      <div class="wrap">
-        <div class="header"><div class="label" id="callLabel">Дзвінок</div></div>
-        <div class="video">
-          <video id="remoteVideo" autoplay playsinline></video>
-          <video id="localVideo" autoplay playsinline muted></video>
-          <div class="audio-only" id="audioLabel">Аудіодзвінок</div>
+      <div class="wrap" id="callWrap">
+        <div class="bg"></div>
+        <div class="top">
+          <div class="type" id="callLabel">Дзвінок</div>
+          <div class="peer-name" id="peerName">${peerDisplay}</div>
+          <div class="call-status" id="statusLabel"><span class="dot"></span><span id="statusText">З'єднання…</span></div>
+          <div class="timer" id="timerLabel">00:00</div>
         </div>
-        <div class="controls"><button class="end" id="endCallBtn">Завершити</button></div>
+        <div class="center" id="centerArea">
+          <div class="avatar-wrap">
+            <div class="avatar" id="avatarEl">${peerInitial}</div>
+            <div class="wave-wrap" id="waveWrap">
+              <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+            </div>
+          </div>
+        </div>
+        <video id="remoteVideo" autoplay playsinline></video>
+        <video id="localVideo" autoplay playsinline muted></video>
+        <div class="bar">
+          <button class="btn btn-default" id="micBtn" title="Мікрофон">
+            <svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+            <span class="btn-label">Мікрофон</span>
+          </button>
+          <button class="btn btn-default" id="camBtn" title="Камера" style="display:none">
+            <svg viewBox="0 0 24 24"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+            <span class="btn-label">Камера</span>
+          </button>
+          <button class="btn btn-end" id="endCallBtn" title="Завершити">
+            <svg viewBox="0 0 24 24"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.15-1.15a1 1 0 0 1 .9-.27 11.4 11.4 0 0 0 3.87.65 1 1 0 0 1 .99 1v3.5a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.22 2.6.65 3.87a1 1 0 0 1-.27.9z" stroke="#fff" fill="none"/><line x1="1" y1="1" x2="23" y2="23" stroke="#fff"/></svg>
+            <span class="btn-label">Завершити</span>
+          </button>
+          <button class="btn btn-default" id="screenBtn" title="Демонстрація екрану" style="display:none">
+            <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+            <span class="btn-label">Екран</span>
+          </button>
+          <button class="btn btn-default" id="fullscreenBtn" title="На весь екран">
+            <svg viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+            <span class="btn-label">Екран</span>
+          </button>
+        </div>
       </div>`;
-    const endButton = win.document.getElementById("endCallBtn");
+
+    const $ = (id: string) => win.document.getElementById(id);
+    const endButton = $("endCallBtn");
     if (endButton) endButton.addEventListener("click", () => endCall());
+
+    const micBtn = $("micBtn") as HTMLButtonElement | null;
+    if (micBtn) micBtn.addEventListener("click", () => toggleMic());
+
+    const camBtn = $("camBtn") as HTMLButtonElement | null;
+    if (camBtn) camBtn.addEventListener("click", () => toggleCamera());
+
+    const fullscreenBtn = $("fullscreenBtn") as HTMLButtonElement | null;
+    if (fullscreenBtn) fullscreenBtn.addEventListener("click", () => {
+      if (!win.document.fullscreenElement) win.document.documentElement.requestFullscreen().catch(() => {});
+      else win.document.exitFullscreen().catch(() => {});
+    });
+
+    const screenBtn = $("screenBtn") as HTMLButtonElement | null;
+    if (screenBtn) screenBtn.addEventListener("click", () => shareScreen());
+
+    const localVideo = $("localVideo") as HTMLVideoElement | null;
+    if (localVideo) {
+      let dragging = false, ox = 0, oy = 0;
+      localVideo.addEventListener("mousedown", (e) => {
+        dragging = true; ox = e.offsetX; oy = e.offsetY;
+        localVideo.style.cursor = "grabbing";
+      });
+      win.document.addEventListener("mousemove", (e) => {
+        if (!dragging) return;
+        localVideo.style.right = "auto"; localVideo.style.bottom = "auto";
+        localVideo.style.left = `${e.clientX - ox}px`;
+        localVideo.style.top = `${e.clientY - oy}px`;
+      });
+      win.document.addEventListener("mouseup", () => { dragging = false; localVideo.style.cursor = "grab"; });
+    }
+
+    const startTime = Date.now();
+    const timerLabel = $("timerLabel") as HTMLDivElement | null;
+    const timerInterval = win.setInterval(() => {
+      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      const m = String(Math.floor(elapsed / 60)).padStart(2, "0");
+      const s = String(elapsed % 60).padStart(2, "0");
+      if (timerLabel) timerLabel.textContent = `${m}:${s}`;
+    }, 1000) as unknown as number;
+
     callWindowPartsRef.current = {
-      localVideo: win.document.getElementById("localVideo") as HTMLVideoElement | undefined,
-      remoteVideo: win.document.getElementById("remoteVideo") as HTMLVideoElement | undefined,
-      label: win.document.getElementById("callLabel") as HTMLDivElement | undefined
+      localVideo: localVideo ?? undefined,
+      remoteVideo: $("remoteVideo") as HTMLVideoElement | undefined,
+      label: $("callLabel") as HTMLDivElement | undefined,
+      peerName: $("peerName") as HTMLDivElement | undefined,
+      statusLabel: $("statusText") as HTMLDivElement | undefined,
+      timerLabel: timerLabel ?? undefined,
+      avatar: $("avatarEl") as HTMLDivElement | undefined,
+      micBtn: micBtn ?? undefined,
+      camBtn: camBtn ?? undefined,
+      fullscreenBtn: fullscreenBtn ?? undefined,
+      timerInterval,
     };
     return win;
+  };
+
+  const toggleMic = () => {
+    const stream = callRef.current.localStream;
+    if (!stream) return;
+    const track = stream.getAudioTracks()[0];
+    if (!track) return;
+    track.enabled = !track.enabled;
+    const parts = callWindowPartsRef.current;
+    if (parts?.micBtn) {
+      parts.micBtn.className = track.enabled ? "btn btn-default" : "btn btn-active";
+    }
+  };
+
+  const toggleCamera = () => {
+    const stream = callRef.current.localStream;
+    if (!stream) return;
+    const track = stream.getVideoTracks()[0];
+    if (!track) return;
+    track.enabled = !track.enabled;
+    const parts = callWindowPartsRef.current;
+    if (parts?.camBtn) {
+      parts.camBtn.className = track.enabled ? "btn btn-default" : "btn btn-active";
+    }
+    if (parts?.localVideo) {
+      parts.localVideo.style.opacity = track.enabled ? "1" : "0.3";
+    }
+  };
+
+  const shareScreen = async () => {
+    try {
+      const pc = callRef.current.pc;
+      if (!pc) return;
+      const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+      const screenTrack = screenStream.getVideoTracks()[0];
+      const sender = pc.getSenders().find((s) => s.track?.kind === "video");
+      if (sender) {
+        await sender.replaceTrack(screenTrack);
+        screenTrack.onended = () => {
+          const camTrack = callRef.current.localStream?.getVideoTracks()[0];
+          if (camTrack && sender) sender.replaceTrack(camTrack);
+        };
+      }
+    } catch { /* user cancelled */ }
   };
 
   const ensureCallWindow = (isVideo: boolean) => {
     if (!callWindowRef.current || callWindowRef.current.closed) callWindowRef.current = renderCallWindow();
     const parts = callWindowPartsRef.current;
     if (!parts) return;
-    if (parts.label) parts.label.textContent = isVideo ? "Відеодзвінок" : "Аудіодзвінок";
+    const win = callWindowRef.current;
+
+    if (parts.label) parts.label.textContent = isVideo ? "ВІДЕОДЗВІНОК" : "АУДІОДЗВІНОК";
+
+    const peerDisplay = peer?.login ?? peer?.phone ?? "Абонент";
+    if (parts.peerName) parts.peerName.textContent = peerDisplay;
+
     if (parts.remoteVideo) parts.remoteVideo.style.display = isVideo ? "block" : "none";
     if (parts.localVideo) parts.localVideo.style.display = isVideo ? "block" : "none";
-    const audioLabel = callWindowRef.current?.document.getElementById("audioLabel");
-    if (audioLabel) {
-      audioLabel.textContent = isVideo ? "" : "Аудіодзвінок";
-      (audioLabel as HTMLDivElement).style.display = isVideo ? "none" : "block";
+
+    if (parts.camBtn) (parts.camBtn as HTMLElement).style.display = isVideo ? "flex" : "none";
+    const screenBtn = win?.document.getElementById("screenBtn");
+    if (screenBtn) screenBtn.style.display = isVideo ? "flex" : "none";
+
+    const wrap = win?.document.getElementById("callWrap");
+    const centerArea = win?.document.getElementById("centerArea");
+    const waveWrap = win?.document.getElementById("waveWrap");
+    if (isVideo) {
+      wrap?.classList.add("video-overlay");
+      if (centerArea) centerArea.style.display = "none";
+    } else {
+      wrap?.classList.remove("video-overlay");
+      if (centerArea) centerArea.style.display = "flex";
+      if (waveWrap) waveWrap.style.display = "flex";
     }
+
+    if (call.status === "in-call" && parts.statusLabel) parts.statusLabel.textContent = "Активний дзвінок";
+    if (call.status === "calling" && parts.statusLabel) parts.statusLabel.textContent = "Виклик…";
   };
 
   const syncCallWindowStreams = (localStream?: MediaStream, remoteStream?: MediaStream) => {
@@ -920,6 +1118,9 @@ export default function App() {
   };
 
   const closeCallWindow = () => {
+    if (callWindowPartsRef.current?.timerInterval) {
+      callWindowRef.current?.clearInterval(callWindowPartsRef.current.timerInterval);
+    }
     if (callWindowRef.current && !callWindowRef.current.closed) callWindowRef.current.close();
     callWindowRef.current = null; callWindowPartsRef.current = null;
   };
