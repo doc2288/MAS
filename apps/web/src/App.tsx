@@ -124,7 +124,7 @@ export default function App() {
   const [messages, setMessages] = useState<UiMessage[]>([]);
   const [chatList, setChatList] = useState<ChatSummary[]>([]);
   const [status, setStatus] = useState("");
-  const [statusText, setStatusText] = useState("");
+  
   const [activeTab, setActiveTab] = useState<"chat" | "settings">("chat");
   const [isMenuOpen, setIsMenuOpen] = useState(true);
   const [chatQuery, setChatQuery] = useState("");
@@ -169,6 +169,8 @@ export default function App() {
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const typingTimerRef = useRef<number | null>(null);
   const peerTypingTimerRef = useRef<number | null>(null);
+  const peerRef = useRef<User | null>(null);
+  const callRef = useRef<CallState>({ status: "idle" });
 
   const devices = [
     { name: "MAS Desktop", location: "Windows · Локально", lastActive: "Активний зараз" },
@@ -179,6 +181,9 @@ export default function App() {
     { title: "Зміна статусу", time: "Сьогодні, 09:05" },
     { title: "Надіслано файл", time: "Вчора, 21:40" }
   ];
+
+  useEffect(() => { peerRef.current = peer; }, [peer]);
+  useEffect(() => { callRef.current = call; }, [call]);
 
   const scrollToBottom = useCallback(() => {
     setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
@@ -432,7 +437,7 @@ export default function App() {
         });
       }
       if (type === "typing") {
-        if (payload.from === peer?.id) {
+        if (payload.from === peerRef.current?.id) {
           setPeerTyping(true);
           if (peerTypingTimerRef.current) clearTimeout(peerTypingTimerRef.current);
           peerTypingTimerRef.current = window.setTimeout(() => setPeerTyping(false), 3000);
@@ -443,19 +448,19 @@ export default function App() {
           ...prev, status: "incoming", offer: payload.offer,
           isVideo: payload.isVideo, callerId: payload.from
         }));
-        if (!peer || peer.id !== payload.from) {
+        if (!peerRef.current || peerRef.current.id !== payload.from) {
           fetchPeerById(payload.from).then((u) => { if (u) setPeer(u); });
         }
       }
       if (type === "call.answer") {
-        if (call.pc && payload.answer) {
-          await call.pc.setRemoteDescription(payload.answer);
+        if (callRef.current.pc && payload.answer) {
+          await callRef.current.pc.setRemoteDescription(payload.answer);
           setCall((prev) => ({ ...prev, status: "in-call" }));
         }
       }
       if (type === "call.ice") {
-        if (call.pc && payload.candidate) {
-          await call.pc.addIceCandidate(payload.candidate);
+        if (callRef.current.pc && payload.candidate) {
+          await callRef.current.pc.addIceCandidate(payload.candidate);
         }
       }
       if (type === "call.end") { endCall(); }
@@ -469,13 +474,14 @@ export default function App() {
     ws.onerror = () => {
       ws.close();
     };
-  }, [token, peer, call.pc, fetchChats, notificationsEnabled]);
+  }, [token, fetchChats, notificationsEnabled]);
 
   useEffect(() => {
     if (!token) return;
     connectWebSocket();
     return () => {
-      if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
+      if (reconnectTimer.current) { clearTimeout(reconnectTimer.current); reconnectTimer.current = null; }
+      if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
     };
   }, [token, connectWebSocket]);
 
@@ -852,12 +858,7 @@ export default function App() {
     } catch { setStatus("Помилка завантаження файлу."); }
   };
 
-  const updateStatus = () => {
-    if (!wsRef.current || !statusText) return;
-    wsRef.current.send(JSON.stringify({ type: "status.update", payload: { status: statusText } }));
-    setStatus(`Ваш статус: ${statusText}`);
-    setStatusText("");
-  };
+  
 
   // -- Call functions with error handling --
   const renderCallWindow = () => {

@@ -172,8 +172,9 @@ export const attachWebSocket = (server: import("http").Server) => {
           const target = clients.get(payload.peerId);
           if (target) safeSend(target.socket, JSON.stringify({ type: "message.read", payload: { ids, readAt } }));
         }
-      } catch {
-        // malformed
+      } catch (err) {
+        if (err instanceof SyntaxError) return;
+        console.error(`[WS] Error processing message from ${userId}:`, (err as Error).message);
       }
     });
 

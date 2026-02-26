@@ -1,25 +1,6 @@
 import nacl from "tweetnacl";
 import { decodeUTF8, encodeBase64, decodeBase64, encodeUTF8 } from "tweetnacl-util";
 
-export type Message = {
-  id: string;
-  text: string;
-  createdAt: string;
-  senderId: string;
-};
-
-export type SessionState = {
-  sessionId: string;
-  peerId: string;
-  isEncrypted: boolean;
-};
-
-export const securityChecklist = [
-  "Наскрізне шифрування ввімкнено",
-  "Ключі не залишають пристрій",
-  "Перевірено перед збіркою"
-];
-
 export type KeyPair = {
   publicKey: string;
   secretKey: string;
