@@ -375,8 +375,10 @@ export default function App() {
   // WebSocket with auto-reconnect
   const connectWebSocket = useCallback(() => {
     if (!token) return;
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) return;
-    if (wsRef.current && wsRef.current.readyState === WebSocket.CONNECTING) return;
+    if (wsRef.current) {
+      const s = wsRef.current.readyState;
+      if (s === WebSocket.OPEN || s === WebSocket.CONNECTING) return;
+    }
 
     const ws = new WebSocket(`${WS_URL}?token=${token}`);
     wsRef.current = ws;
@@ -481,7 +483,6 @@ export default function App() {
     connectWebSocket();
     return () => {
       if (reconnectTimer.current) { clearTimeout(reconnectTimer.current); reconnectTimer.current = null; }
-      if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
     };
   }, [token, connectWebSocket]);
 
