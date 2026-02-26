@@ -59,7 +59,14 @@ type CallState = {
 
 const API_URL = "http://localhost:4000";
 const WS_URL = "ws://localhost:4000";
-const emojiList = ["😀","😂","😍","🤔","👍","👎","❤️","🔥","🚀","💬","✅","🔒","😎","🎉","😢","🙏","💪","👋","🤝","⭐"];
+const emojiCategories: Record<string, string[]> = {
+  "Обличчя": ["😀","😂","🤣","😍","🥰","😘","😎","🤩","🥳","😏","🤔","🙄","😴","🤯","🥺","😤","😭","😱","🤗","😇"],
+  "Жести": ["👍","👎","👋","🤝","🙏","💪","✌️","🤟","👏","🫶","☝️","👆","👇","👉","👈","✋","🤚","🖖","🫡","🫰"],
+  "Серця": ["❤️","🧡","💛","💚","💙","💜","🖤","🤍","💔","❤️‍🔥","💕","💖","💗","💘","💝","♥️","🫀","💟","❣️","💞"],
+  "Об'єкти": ["🔥","⭐","✨","💫","🌟","🎉","🎊","🎁","🏆","🥇","💎","🔑","💡","📌","📎","✏️","📝","💬","🔒","🚀"],
+  "Символи": ["✅","❌","⚠️","💯","♻️","🔄","➡️","⬅️","⬆️","⬇️","▶️","⏸️","🔴","🟢","🔵","⚪","⚫","🟡","🟣","🟠"]
+};
+const allEmojis = Object.values(emojiCategories).flat();
 
 const formatTime = (iso: string) =>
   new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -141,7 +148,9 @@ export default function App() {
   const [chatSearch, setChatSearch] = useState("");
   const [chatSearchOpen, setChatSearchOpen] = useState(false);
   const [reactionPicker, setReactionPicker] = useState<string | null>(null);
-  const quickReactions = ["👍","❤️","😂","😮","😢","🔥"];
+  const [emojiCategory, setEmojiCategory] = useState("Обличчя");
+  const [emojiSearch, setEmojiSearch] = useState("");
+  const quickReactions = ["👍","❤️","😂","😮","😢","🔥","🚀"];
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<number | null>(null);
@@ -1295,21 +1304,43 @@ export default function App() {
                 <div ref={messagesEndRef} />
               </div>
               {ctxMenu && (
-                <div className="ctx-menu" style={{ top: ctxMenu.y, left: ctxMenu.x }}>
-                  <button onClick={() => { startReply(ctxMenu.msg); }}>↩ Відповісти</button>
-                  {ctxMenu.msg.isMine && <button onClick={() => { startEdit(ctxMenu.msg); }}>✏ Редагувати</button>}
-                  <button onClick={() => { copyMessageText(ctxMenu.msg.text ?? ""); setCtxMenu(null); }}>📋 Копіювати</button>
-                  <button onClick={() => { pinMessage(ctxMenu.msg.id); setCtxMenu(null); }}>{ctxMenu.msg.pinned ? "📌 Відкріпити" : "📌 Закріпити"}</button>
-                  <button onClick={() => { setReactionPicker(ctxMenu.msg.id); setCtxMenu(null); }}>😀 Реакція</button>
-                  {ctxMenu.msg.isMine && <button className="ctx-danger" onClick={() => { deleteMessage(ctxMenu.msg.id); setCtxMenu(null); }}>🗑 Видалити</button>}
+                <div className="ctx-menu" style={{ top: Math.min(ctxMenu.y, window.innerHeight - 300), left: Math.min(ctxMenu.x, window.innerWidth - 220) }}>
+                  <div className="ctx-reactions">
+                    {quickReactions.map((e) => (
+                      <button key={e} className="ctx-react-btn" onClick={() => { reactToMessage(ctxMenu.msg.id, e); setCtxMenu(null); }}>{e}</button>
+                    ))}
+                  </div>
+                  <div className="ctx-divider" />
+                  <button className="ctx-item" onClick={() => { startReply(ctxMenu.msg); }}><span className="ctx-icon">↩</span>Відповісти</button>
+                  {ctxMenu.msg.isMine && <button className="ctx-item" onClick={() => { startEdit(ctxMenu.msg); }}><span className="ctx-icon">✏️</span>Редагувати</button>}
+                  <button className="ctx-item" onClick={() => { copyMessageText(ctxMenu.msg.text ?? ""); setCtxMenu(null); }}><span className="ctx-icon">📋</span>Копіювати</button>
+                  <button className="ctx-item" onClick={() => { pinMessage(ctxMenu.msg.id); setCtxMenu(null); }}><span className="ctx-icon">📌</span>{ctxMenu.msg.pinned ? "Відкріпити" : "Закріпити"}</button>
+                  {ctxMenu.msg.isMine && (<><div className="ctx-divider" /><button className="ctx-item ctx-danger" onClick={() => { deleteMessage(ctxMenu.msg.id); setCtxMenu(null); }}><span className="ctx-icon">🗑</span>Видалити</button></>)}
                 </div>
               )}
               <div className="composer">
                 {showEmoji && (
                   <div className="emoji-picker">
-                    {emojiList.map((e) => (
-                      <button key={e} className="emoji-btn" onClick={() => setMsgInput((p) => p + e)}>{e}</button>
-                    ))}
+                    <div className="emoji-header">
+                      <input className="emoji-search" placeholder="Пошук емодзі…" value={emojiSearch}
+                        onChange={(e) => setEmojiSearch(e.target.value)} autoFocus />
+                    </div>
+                    <div className="emoji-tabs">
+                      {Object.keys(emojiCategories).map((cat) => (
+                        <button key={cat} className={`emoji-tab ${emojiCategory === cat ? "active" : ""}`}
+                          onClick={() => { setEmojiCategory(cat); setEmojiSearch(""); }}>
+                          {cat === "Обличчя" ? "😀" : cat === "Жести" ? "👋" : cat === "Серця" ? "❤️" : cat === "Об'єкти" ? "⭐" : "✅"}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="emoji-grid">
+                      {(emojiSearch
+                        ? allEmojis.filter((e) => e.includes(emojiSearch))
+                        : emojiCategories[emojiCategory] ?? []
+                      ).map((e) => (
+                        <button key={e} className="emoji-btn" onClick={() => setMsgInput((p) => p + e)}>{e}</button>
+                      ))}
+                    </div>
                   </div>
                 )}
                 {(replyTo || editingMsg) && (
