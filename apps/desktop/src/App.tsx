@@ -179,6 +179,7 @@ export default function App() {
   const peerTypingTimerRef = useRef<number | null>(null);
   const peerRef = useRef<User | null>(null);
   const callRef = useRef<CallState>({ status: "idle" });
+  const screenShareRef = useRef<{ stream: MediaStream; originalTrack: MediaStreamTrack | null; sender: RTCRtpSender | null } | null>(null);
 
   const devices = [
     { name: "MAS Desktop", location: "Windows · Локально", lastActive: "Активний зараз" },
@@ -454,12 +455,24 @@ export default function App() {
         }
       }
       if (type === "call.offer") {
-        setCall((prev) => ({
-          ...prev, status: "incoming", offer: payload.offer,
-          isVideo: payload.isVideo, callerId: payload.from
-        }));
-        if (!peerRef.current || peerRef.current.id !== payload.from) {
-          fetchPeerById(payload.from).then((u) => { if (u) setPeer(u); });
+        if (payload.renegotiate && callRef.current.pc && callRef.current.status === "in-call") {
+          const pc = callRef.current.pc;
+          await pc.setRemoteDescription(payload.offer);
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          if (wsRef.current?.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({
+              type: "call.answer", payload: { to: payload.from, answer }
+            }));
+          }
+        } else {
+          setCall((prev) => ({
+            ...prev, status: "incoming", offer: payload.offer,
+            isVideo: payload.isVideo, callerId: payload.from
+          }));
+          if (!peerRef.current || peerRef.current.id !== payload.from) {
+            fetchPeerById(payload.from).then((u) => { if (u) setPeer(u); });
+          }
         }
       }
       if (type === "call.answer") {
@@ -926,6 +939,8 @@ export default function App() {
         .btn-end:hover{background:#dc2626;box-shadow:0 6px 28px rgba(239,68,68,0.4)}
         .btn-end svg{stroke:#fff}
         .btn-label{position:absolute;bottom:-20px;left:50%;transform:translateX(-50%);font-size:10px;color:rgba(244,246,251,0.5);white-space:nowrap;letter-spacing:0.04em;font-weight:500}
+        .screen-indicator{display:flex;align-items:center;gap:6px;padding:4px 12px;border-radius:20px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);color:#fca5a5;font-size:11px;font-weight:600;letter-spacing:0.04em;margin-top:4px;animation:screenPulse 2s ease infinite}
+        @keyframes screenPulse{0%,100%{opacity:1}50%{opacity:0.6}}
         .video-overlay .top{background:linear-gradient(to bottom,rgba(12,15,26,0.7),transparent);position:absolute;top:0;left:0;right:0;z-index:2}
         .video-overlay .bar{position:absolute;bottom:0;left:0;right:0;z-index:2}
         .video-overlay .center{display:none}
@@ -937,6 +952,10 @@ export default function App() {
           <div class="peer-name" id="peerName">${peerDisplay}</div>
           <div class="call-status" id="statusLabel"><span class="dot"></span><span id="statusText">З'єднання…</span></div>
           <div class="timer" id="timerLabel">00:00</div>
+          <div class="screen-indicator" id="screenIndicator" style="display:none">
+            <svg viewBox="0 0 24 24" width="14" height="14"><rect x="2" y="3" width="20" height="14" rx="2" ry="2" fill="none" stroke="currentColor" stroke-width="2"/><line x1="8" y1="21" x2="16" y2="21" stroke="currentColor" stroke-width="2"/><line x1="12" y1="17" x2="12" y2="21" stroke="currentColor" stroke-width="2"/></svg>
+            <span>Трансляція екрану</span>
+          </div>
         </div>
         <div class="center" id="centerArea">
           <div class="avatar-wrap">
@@ -961,7 +980,7 @@ export default function App() {
             <svg viewBox="0 0 24 24"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.15-1.15a1 1 0 0 1 .9-.27 11.4 11.4 0 0 0 3.87.65 1 1 0 0 1 .99 1v3.5a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.22 2.6.65 3.87a1 1 0 0 1-.27.9z" stroke="#fff" fill="none"/><line x1="1" y1="1" x2="23" y2="23" stroke="#fff"/></svg>
             <span class="btn-label">Завершити</span>
           </button>
-          <button class="btn btn-default" id="screenBtn" title="Демонстрація екрану" style="display:none">
+          <button class="btn btn-default" id="screenBtn" title="Демонстрація екрану">
             <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
             <span class="btn-label">Екран</span>
           </button>
@@ -1059,21 +1078,119 @@ export default function App() {
     }
   };
 
-  const shareScreen = async () => {
-    try {
-      const pc = callRef.current.pc;
-      if (!pc) return;
-      const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-      const screenTrack = screenStream.getVideoTracks()[0];
-      const sender = pc.getSenders().find((s) => s.track?.kind === "video");
-      if (sender) {
-        await sender.replaceTrack(screenTrack);
-        screenTrack.onended = () => {
-          const camTrack = callRef.current.localStream?.getVideoTracks()[0];
-          if (camTrack && sender) sender.replaceTrack(camTrack);
-        };
+  const stopScreenShare = () => {
+    const ss = screenShareRef.current;
+    if (!ss) return;
+    ss.stream.getTracks().forEach((t) => t.stop());
+    const pc = callRef.current.pc;
+    if (pc && ss.sender) {
+      if (ss.originalTrack) {
+        ss.sender.replaceTrack(ss.originalTrack);
+      } else {
+        pc.removeTrack(ss.sender);
+        if (pc.signalingState !== "closed") {
+          pc.createOffer().then((o) => pc.setLocalDescription(o)).then(() => {
+            const targetId = peerRef.current?.id ?? callRef.current.callerId;
+            if (targetId && wsRef.current?.readyState === WebSocket.OPEN) {
+              wsRef.current.send(JSON.stringify({
+                type: "call.offer", payload: { to: targetId, offer: pc.localDescription, isVideo: callRef.current.isVideo, renegotiate: true }
+              }));
+            }
+          }).catch(() => {});
+        }
       }
-    } catch { /* user cancelled */ }
+    }
+    screenShareRef.current = null;
+    updateScreenBtnState(false);
+    updateCallWindowScreenMode(false);
+  };
+
+  const shareScreen = async () => {
+    if (screenShareRef.current) { stopScreenShare(); return; }
+    const pc = callRef.current.pc;
+    if (!pc) return;
+    try {
+      const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+      const screenTrack = screenStream.getVideoTracks()[0];
+      const existingSender = pc.getSenders().find((s) => s.track?.kind === "video");
+      let sender: RTCRtpSender;
+      let originalTrack: MediaStreamTrack | null = null;
+
+      if (existingSender) {
+        originalTrack = existingSender.track;
+        await existingSender.replaceTrack(screenTrack);
+        sender = existingSender;
+      } else {
+        sender = pc.addTrack(screenTrack, screenStream);
+        if (pc.signalingState !== "closed") {
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          const targetId = peerRef.current?.id ?? callRef.current.callerId;
+          if (targetId && wsRef.current?.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({
+              type: "call.offer", payload: { to: targetId, offer: pc.localDescription, isVideo: callRef.current.isVideo, renegotiate: true }
+            }));
+          }
+        }
+      }
+
+      screenShareRef.current = { stream: screenStream, originalTrack, sender };
+      updateScreenBtnState(true);
+      updateCallWindowScreenMode(true);
+
+      const parts = callWindowPartsRef.current;
+      if (parts?.localVideo) {
+        parts.localVideo.srcObject = screenStream;
+        parts.localVideo.style.display = "block";
+        parts.localVideo.style.opacity = "1";
+      }
+
+      screenTrack.onended = () => stopScreenShare();
+    } catch { /* user cancelled picker */ }
+  };
+
+  const updateScreenBtnState = (active: boolean) => {
+    const win = callWindowRef.current;
+    if (!win) return;
+    const btn = win.document.getElementById("screenBtn");
+    if (btn) btn.className = active ? "btn btn-active" : "btn btn-default";
+    const indicator = win.document.getElementById("screenIndicator");
+    if (indicator) indicator.style.display = active ? "flex" : "none";
+  };
+
+  const updateCallWindowScreenMode = (sharing: boolean) => {
+    const win = callWindowRef.current;
+    if (!win) return;
+    const wrap = win.document.getElementById("callWrap");
+    const centerArea = win.document.getElementById("centerArea");
+    if (sharing && !callRef.current.isVideo) {
+      wrap?.classList.add("video-overlay");
+      if (centerArea) centerArea.style.display = "none";
+      const parts = callWindowPartsRef.current;
+      if (parts?.localVideo) {
+        parts.localVideo.style.display = "block";
+        parts.localVideo.style.width = "100%";
+        parts.localVideo.style.height = "100%";
+        parts.localVideo.style.position = "absolute";
+        parts.localVideo.style.inset = "0";
+        parts.localVideo.style.borderRadius = "0";
+        parts.localVideo.style.border = "none";
+        parts.localVideo.style.zIndex = "0";
+        parts.localVideo.style.cursor = "default";
+      }
+    } else if (!sharing && !callRef.current.isVideo) {
+      wrap?.classList.remove("video-overlay");
+      if (centerArea) centerArea.style.display = "flex";
+      const parts = callWindowPartsRef.current;
+      if (parts?.localVideo) {
+        parts.localVideo.style.display = "none";
+        parts.localVideo.srcObject = callRef.current.localStream ?? null;
+        parts.localVideo.style.width = ""; parts.localVideo.style.height = "";
+        parts.localVideo.style.position = ""; parts.localVideo.style.inset = "";
+        parts.localVideo.style.borderRadius = ""; parts.localVideo.style.border = "";
+        parts.localVideo.style.zIndex = ""; parts.localVideo.style.cursor = "";
+      }
+    }
   };
 
   const ensureCallWindow = (isVideo: boolean) => {
@@ -1091,8 +1208,6 @@ export default function App() {
     if (parts.localVideo) parts.localVideo.style.display = isVideo ? "block" : "none";
 
     if (parts.camBtn) (parts.camBtn as HTMLElement).style.display = isVideo ? "flex" : "none";
-    const screenBtn = win?.document.getElementById("screenBtn");
-    if (screenBtn) screenBtn.style.display = isVideo ? "flex" : "none";
 
     const wrap = win?.document.getElementById("callWrap");
     const centerArea = win?.document.getElementById("centerArea");
@@ -1228,6 +1343,10 @@ export default function App() {
   };
 
   const endCall = () => {
+    if (screenShareRef.current) {
+      screenShareRef.current.stream.getTracks().forEach((t) => t.stop());
+      screenShareRef.current = null;
+    }
     call.pc?.close();
     call.localStream?.getTracks().forEach((track) => track.stop());
     stopTone();
