@@ -928,6 +928,26 @@ button:active { transform: scale(0.98); }
 }
 .pinned-bar:hover { background: rgba(34,211,238,0.1); }
 
+/* ========== NO KEY BANNER ========== */
+.no-key-banner {
+  display: flex; gap: 12px; align-items: center;
+  padding: 12px 20px;
+  background: rgba(245, 158, 11, 0.08);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.15);
+  flex-shrink: 0;
+}
+.no-key-icon { font-size: 20px; flex-shrink: 0; }
+.no-key-text {
+  display: flex; flex-direction: column; gap: 2px;
+}
+.no-key-text strong {
+  font-size: 13px; font-weight: 600;
+  color: #f59e0b;
+}
+.no-key-text span {
+  font-size: 12px; color: var(--text-secondary);
+}
+
 /* ========== CHAT SEARCH ========== */
 .chat-search-bar {
   display: flex; gap: 8px; align-items: center;

@@ -447,6 +447,9 @@ export default function App() {
           else next.delete(payload.userId);
           return next;
         });
+        if (payload.isOnline && peerRef.current && peerRef.current.id === payload.userId && !peerRef.current.publicKey) {
+          fetchPeerById(payload.userId).then((u) => { if (u?.publicKey) setPeer(u); });
+        }
       }
       if (type === "typing") {
         if (payload.from === peerRef.current?.id) {
@@ -729,7 +732,7 @@ export default function App() {
     if (!targetKey) {
       const refreshed = await fetchPeerById(peer.id);
       if (refreshed?.publicKey) { setPeer(refreshed); targetKey = refreshed.publicKey; }
-      else { setStatus("У контакта немає публічного ключа."); return; }
+      else { setStatus("Контакт ще не увійшов у месенджер. Публічний ключ з'явиться після першого входу."); return; }
     }
     const id = crypto.randomUUID();
     const createdAt = new Date().toISOString();
@@ -1614,6 +1617,15 @@ export default function App() {
                     onChange={(e) => setChatSearch(e.target.value)} />
                   <span className="chat-search-count">{chatSearch ? `${filteredMessages.length} знайдено` : ""}</span>
                   <button className="ghost" onClick={() => { setChatSearchOpen(false); setChatSearch(""); }}>✕</button>
+                </div>
+              )}
+              {!peer.publicKey && (
+                <div className="no-key-banner">
+                  <span className="no-key-icon">🔑</span>
+                  <div className="no-key-text">
+                    <strong>Контакт ще не увійшов у месенджер</strong>
+                    <span>Надсилання повідомлень стане доступним після першого входу контакта.</span>
+                  </div>
                 </div>
               )}
               {messages.some((m) => m.pinned) && (
