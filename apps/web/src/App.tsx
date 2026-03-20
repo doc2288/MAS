@@ -1559,7 +1559,7 @@ export default function App() {
       <div className="content">
         <div className="topbar">
           <div className="topbar-left">
-            <button className="hamburger" onClick={() => setIsMenuOpen((p) => !p)}>
+            <button className="hamburger" onClick={() => setIsMenuOpen((p) => !p)} aria-label="Відкрити/закрити меню">
               <span /><span /><span />
             </button>
             <button className="gear"
@@ -1738,11 +1738,11 @@ export default function App() {
                   </div>
                 )}
                 <div className="composer-row">
-                  <button className="emoji-toggle" onClick={() => setShowEmoji((p) => !p)}>😀</button>
+                  <button className="emoji-toggle" onClick={() => setShowEmoji((p) => !p)} aria-label="Вибрати емодзі">😀</button>
                   <textarea placeholder="Повідомлення" value={msgInput} rows={1}
                     onChange={(e) => { setMsgInput(e.target.value); sendTyping(); if (showEmoji) setShowEmoji(false); }}
                     onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendText(); } }} />
-                  <button className="send-btn" onClick={handleSendText} disabled={!msgInput.trim()}>
+                  <button className="send-btn" onClick={handleSendText} disabled={!msgInput.trim()} aria-label="Надіслати повідомлення">
                     <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
                   </button>
                   <label className="attach-btn" aria-label="Завантажити файл">
