@@ -5,20 +5,22 @@
   "scripts": {
     "dev": "expo start",
     "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
-    "web": "expo start --web",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "build": "expo export",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@mas/shared": "0.0.1",
     "expo": "^55.0.2",
-    "react": "^19.2.4",
-    "react-native": "^0.76.9"
+    "expo-camera": "^55.0.18",
+    "expo-secure-store": "^55.0.14",
+    "react": "19.2.0",
+    "react-native": "0.83.6"
   },
   "devDependencies": {
     "@types/react": "^19.2.14",
     "typescript": "^5.8.3"
-  }
+  },
+  "version": "1.0.0"
 }

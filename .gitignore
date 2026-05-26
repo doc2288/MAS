@@ -7,3 +7,5 @@ dist
 apps/desktop/build
 apps/mobile/.expo
 /apps/desktop/src-tauri/target/
+apps/server/data/
+apps/server/uploads/

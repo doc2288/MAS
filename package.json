@@ -14,6 +14,7 @@
     "build:web": "npm --workspace apps/web run build",
     "build:desktop": "npm --workspace apps/desktop run build",
     "build:mobile": "npm --workspace apps/mobile run build",
+    "test:v2": "npm --workspace apps/server run test:v2",
     "typecheck": "npm --workspace apps/server run typecheck && npm --workspace apps/web run typecheck && npm --workspace apps/desktop run typecheck && npm --workspace apps/mobile run typecheck && npm --workspace packages/shared run typecheck"
   }
 }

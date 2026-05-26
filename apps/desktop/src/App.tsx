@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import * as QRCode from "qrcode";
 import {
   decryptBytes,
   decryptMessage,
@@ -57,8 +58,251 @@ type CallState = {
   isVideo?: boolean;
 };
 
+type KeyPairState = { publicKey: string; secretKey: string };
+
+type KeyBackupPayload = {
+  ciphertext: string;
+  salt: string;
+  nonce: string;
+  kdf: "PBKDF2-SHA256";
+  iterations: number;
+  updatedAt?: string;
+};
+
+type KeyBackupResponse = {
+  publicKey: string;
+  backup: KeyBackupPayload;
+};
+
+type Lang = "en" | "ru" | "uk" | "no";
+type AuthTranslationKey =
+  | "appName"
+  | "authSubtitle"
+  | "countrySearch"
+  | "nothingFound"
+  | "phoneNumber"
+  | "fullNumber"
+  | "requestCode"
+  | "devCode"
+  | "code"
+  | "signIn"
+  | "language"
+  | "invalidPhone"
+  | "codeSentDev"
+  | "codeSent"
+  | "authSuccess"
+  | "wrongCode"
+  | "networkError";
+
+const authTranslations: Record<Lang, Record<AuthTranslationKey, string>> = {
+  en: {
+    appName: "MAS Secure",
+    authSubtitle: "Sign in with your phone number (SMS).",
+    countrySearch: "Search country or code",
+    nothingFound: "Nothing found",
+    phoneNumber: "Phone number",
+    fullNumber: "Full number",
+    requestCode: "Get code",
+    devCode: "Dev code",
+    code: "Code",
+    signIn: "Sign in",
+    language: "Language",
+    invalidPhone: "Invalid phone number.",
+    codeSentDev: "Code sent (dev).",
+    codeSent: "Code sent.",
+    authSuccess: "Signed in successfully.",
+    wrongCode: "Wrong code.",
+    networkError: "Network error."
+  },
+  ru: {
+    appName: "MAS Secure",
+    authSubtitle: "Вход по номеру телефона (SMS).",
+    countrySearch: "Поиск страны или кода",
+    nothingFound: "Ничего не найдено",
+    phoneNumber: "Номер телефона",
+    fullNumber: "Полный номер",
+    requestCode: "Получить код",
+    devCode: "Dev-код",
+    code: "Код",
+    signIn: "Войти",
+    language: "Язык",
+    invalidPhone: "Неверный номер телефона.",
+    codeSentDev: "Код отправлен (dev).",
+    codeSent: "Код отправлен.",
+    authSuccess: "Вход выполнен.",
+    wrongCode: "Неверный код.",
+    networkError: "Ошибка сети."
+  },
+  uk: {
+    appName: "MAS Secure",
+    authSubtitle: "Вхід за номером телефону (SMS).",
+    countrySearch: "Пошук країни або коду",
+    nothingFound: "Нічого не знайдено",
+    phoneNumber: "Номер телефону",
+    fullNumber: "Повний номер",
+    requestCode: "Отримати код",
+    devCode: "Dev-код",
+    code: "Код",
+    signIn: "Увійти",
+    language: "Мова",
+    invalidPhone: "Невірний номер телефону.",
+    codeSentDev: "Код надіслано (dev).",
+    codeSent: "Код надіслано.",
+    authSuccess: "Вхід виконано.",
+    wrongCode: "Невірний код.",
+    networkError: "Помилка мережі."
+  },
+  no: {
+    appName: "MAS Secure",
+    authSubtitle: "Logg inn med telefonnummer (SMS).",
+    countrySearch: "Søk etter land eller kode",
+    nothingFound: "Ingen treff",
+    phoneNumber: "Telefonnummer",
+    fullNumber: "Fullt nummer",
+    requestCode: "Hent kode",
+    devCode: "Dev-kode",
+    code: "Kode",
+    signIn: "Logg inn",
+    language: "Språk",
+    invalidPhone: "Ugyldig telefonnummer.",
+    codeSentDev: "Kode sendt (dev).",
+    codeSent: "Kode sendt.",
+    authSuccess: "Innlogging fullført.",
+    wrongCode: "Feil kode.",
+    networkError: "Nettverksfeil."
+  }
+};
+
+const languageLabels: Record<Lang, string> = {
+  en: "English",
+  ru: "Русский",
+  uk: "Українська",
+  no: "Norsk"
+};
+const languageOptions: Lang[] = ["en", "ru", "uk", "no"];
+
+type AuthStep = "language" | "method" | "phone" | "code" | "qr";
+type AuthFlowKey =
+  | "chooseLanguage"
+  | "next"
+  | "back"
+  | "chooseSignIn"
+  | "phoneMethod"
+  | "phoneMethodHint"
+  | "qrMethod"
+  | "qrMethodHint"
+  | "confirmPhone"
+  | "codeTitle"
+  | "codeHint"
+  | "changePhone"
+  | "qrTitle"
+  | "qrHint"
+  | "qrWaiting"
+  | "qrExpired"
+  | "qrRetry"
+  | "qrStartFailed"
+  | "qrApproved"
+  | "qrInvalid";
+
+const authFlowText: Record<Lang, Record<AuthFlowKey, string>> = {
+  en: {
+    chooseLanguage: "Choose your language",
+    next: "Next",
+    back: "Back",
+    chooseSignIn: "Choose how to sign in",
+    phoneMethod: "Phone number",
+    phoneMethodHint: "Get an SMS code for this device.",
+    qrMethod: "QR code",
+    qrMethodHint: "Approve this login from your mobile MAS app.",
+    confirmPhone: "Confirm phone",
+    codeTitle: "Enter the code",
+    codeHint: "We sent a one-time code to your phone.",
+    changePhone: "Change phone",
+    qrTitle: "Scan with MAS Mobile",
+    qrHint: "Open MAS on your phone and approve this login.",
+    qrWaiting: "Waiting for mobile approval...",
+    qrExpired: "QR code expired.",
+    qrRetry: "Create new QR",
+    qrStartFailed: "Could not create QR login.",
+    qrApproved: "QR approved. Signing in...",
+    qrInvalid: "QR login is no longer available."
+  },
+  ru: {
+    chooseLanguage: "Выберите язык",
+    next: "Далее",
+    back: "Назад",
+    chooseSignIn: "Выберите способ входа",
+    phoneMethod: "Номер телефона",
+    phoneMethodHint: "Получить SMS-код для этого устройства.",
+    qrMethod: "QR-код",
+    qrMethodHint: "Подтвердить вход в мобильном MAS.",
+    confirmPhone: "Подтвердить номер",
+    codeTitle: "Введите код",
+    codeHint: "Мы отправили одноразовый код на ваш телефон.",
+    changePhone: "Изменить номер",
+    qrTitle: "Сканируйте в MAS Mobile",
+    qrHint: "Откройте MAS на телефоне и подтвердите этот вход.",
+    qrWaiting: "Ожидаем подтверждение с телефона...",
+    qrExpired: "QR-код истёк.",
+    qrRetry: "Создать новый QR",
+    qrStartFailed: "Не удалось создать QR-вход.",
+    qrApproved: "QR подтверждён. Выполняем вход...",
+    qrInvalid: "QR-вход больше недоступен."
+  },
+  uk: {
+    chooseLanguage: "Оберіть мову",
+    next: "Далі",
+    back: "Назад",
+    chooseSignIn: "Оберіть спосіб входу",
+    phoneMethod: "Номер телефону",
+    phoneMethodHint: "Отримати SMS-код для цього пристрою.",
+    qrMethod: "QR-код",
+    qrMethodHint: "Підтвердити вхід у мобільному MAS.",
+    confirmPhone: "Підтвердити номер",
+    codeTitle: "Введіть код",
+    codeHint: "Ми надіслали одноразовий код на ваш телефон.",
+    changePhone: "Змінити номер",
+    qrTitle: "Скануйте в MAS Mobile",
+    qrHint: "Відкрийте MAS на телефоні та підтвердьте цей вхід.",
+    qrWaiting: "Очікуємо підтвердження з телефона...",
+    qrExpired: "QR-код минув.",
+    qrRetry: "Створити новий QR",
+    qrStartFailed: "Не вдалося створити QR-вхід.",
+    qrApproved: "QR підтверджено. Виконуємо вхід...",
+    qrInvalid: "QR-вхід більше недоступний."
+  },
+  no: {
+    chooseLanguage: "Velg språk",
+    next: "Neste",
+    back: "Tilbake",
+    chooseSignIn: "Velg innloggingsmåte",
+    phoneMethod: "Telefonnummer",
+    phoneMethodHint: "Få en SMS-kode for denne enheten.",
+    qrMethod: "QR-kode",
+    qrMethodHint: "Godkjenn innloggingen fra MAS på mobilen.",
+    confirmPhone: "Bekreft telefon",
+    codeTitle: "Skriv inn koden",
+    codeHint: "Vi sendte en engangskode til telefonen.",
+    changePhone: "Endre telefon",
+    qrTitle: "Skann med MAS Mobile",
+    qrHint: "Åpne MAS på telefonen og godkjenn denne innloggingen.",
+    qrWaiting: "Venter på mobilgodkjenning...",
+    qrExpired: "QR-koden er utløpt.",
+    qrRetry: "Lag ny QR",
+    qrStartFailed: "Kunne ikke opprette QR-innlogging.",
+    qrApproved: "QR godkjent. Logger inn...",
+    qrInvalid: "QR-innloggingen er ikke lenger tilgjengelig."
+  }
+};
+
+const loadLang = (): Lang => {
+  const raw = localStorage.getItem("mas.lang");
+  return raw === "ru" || raw === "uk" || raw === "no" || raw === "en" ? raw : "en";
+};
+
 const API_URL = "http://localhost:4000";
 const WS_URL = "ws://localhost:4000";
+const KEY_BACKUP_ITERATIONS = 150_000;
 const emojiCategories: Record<string, string[]> = {
   "Обличчя": ["😀","😂","🤣","😍","🥰","😘","😎","🤩","🥳","😏","🤔","🙄","😴","🤯","🥺","😤","😭","😱","🤗","😇"],
   "Жести": ["👍","👎","👋","🤝","🙏","💪","✌️","🤟","👏","🫶","☝️","👆","👇","👉","👈","✋","🤚","🖖","🫡","🫰"],
@@ -79,6 +323,73 @@ const formatDate = (iso: string) => {
   if (d.toDateString() === today.toDateString()) return "Сьогодні";
   if (d.toDateString() === yesterday.toDateString()) return "Вчора";
   return d.toLocaleDateString("uk-UA", { day: "numeric", month: "long", year: "numeric" });
+};
+
+const loadStoredKeys = (): KeyPairState | null => {
+  try {
+    const raw = localStorage.getItem("mas.keys");
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<KeyPairState>;
+    return typeof parsed.publicKey === "string" && typeof parsed.secretKey === "string"
+      ? { publicKey: parsed.publicKey, secretKey: parsed.secretKey }
+      : null;
+  } catch {
+    localStorage.removeItem("mas.keys");
+    return null;
+  }
+};
+
+const asArrayBuffer = (bytes: Uint8Array): ArrayBuffer =>
+  bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+
+const deriveBackupKey = async (pin: string, salt: Uint8Array, iterations: number) => {
+  const encoder = new TextEncoder();
+  const material = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(pin),
+    "PBKDF2",
+    false,
+    ["deriveKey"]
+  );
+  return crypto.subtle.deriveKey(
+    { name: "PBKDF2", salt: asArrayBuffer(salt), iterations, hash: "SHA-256" },
+    material,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt", "decrypt"]
+  );
+};
+
+const createKeyBackupPayload = async (keys: KeyPairState, pin: string): Promise<KeyBackupPayload> => {
+  const encoder = new TextEncoder();
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const nonce = crypto.getRandomValues(new Uint8Array(12));
+  const key = await deriveBackupKey(pin, salt, KEY_BACKUP_ITERATIONS);
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv: asArrayBuffer(nonce) },
+    key,
+    encoder.encode(keys.secretKey)
+  );
+  return {
+    ciphertext: toBase64(new Uint8Array(ciphertext)),
+    salt: toBase64(salt),
+    nonce: toBase64(nonce),
+    kdf: "PBKDF2-SHA256",
+    iterations: KEY_BACKUP_ITERATIONS
+  };
+};
+
+const restoreKeysFromBackup = async (publicKey: string, backup: KeyBackupPayload, pin: string): Promise<KeyPairState> => {
+  const key = await deriveBackupKey(pin, fromBase64(backup.salt), backup.iterations);
+  const plaintext = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: asArrayBuffer(fromBase64(backup.nonce)) },
+    key,
+    asArrayBuffer(fromBase64(backup.ciphertext))
+  );
+  return {
+    publicKey,
+    secretKey: new TextDecoder().decode(plaintext)
+  };
 };
 
 const notifSound = (() => {
@@ -114,16 +425,22 @@ export default function App() {
   const [devCode, setDevCode] = useState("");
   const [token, setToken] = useState<string | null>(localStorage.getItem("mas.token"));
   const [user, setUser] = useState<User | null>(null);
-  const [keys, setKeys] = useState<{ publicKey: string; secretKey: string } | null>(
-    () => {
-      const raw = localStorage.getItem("mas.keys");
-      return raw ? (JSON.parse(raw) as { publicKey: string; secretKey: string }) : null;
-    }
-  );
+  const [keys, setKeys] = useState<KeyPairState | null>(() => loadStoredKeys());
+  const [language, setLanguage] = useState<Lang>(() => loadLang());
+  const [authStep, setAuthStep] = useState<AuthStep>("language");
+  const [qrSession, setQrSession] = useState<{
+    id: string;
+    secret: string;
+    payload: string;
+    expiresAt: string;
+  } | null>(null);
+  const [qrDataUrl, setQrDataUrl] = useState("");
   const [peer, setPeer] = useState<User | null>(null);
   const [messages, setMessages] = useState<UiMessage[]>([]);
   const [chatList, setChatList] = useState<ChatSummary[]>([]);
   const [status, setStatus] = useState("");
+  const tAuth = useCallback((key: AuthTranslationKey) => authTranslations[language][key], [language]);
+  const ta = useCallback((key: AuthFlowKey) => authFlowText[language][key], [language]);
   
   const [activeTab, setActiveTab] = useState<"chat" | "settings">("chat");
   const [isMenuOpen, setIsMenuOpen] = useState(true);
@@ -150,9 +467,13 @@ export default function App() {
   const [reactionPicker, setReactionPicker] = useState<string | null>(null);
   const [emojiCategory, setEmojiCategory] = useState("Обличчя");
   const [emojiSearch, setEmojiSearch] = useState("");
+  const [backupPin, setBackupPin] = useState("");
+  const [restorePin, setRestorePin] = useState("");
+  const [backupAvailable, setBackupAvailable] = useState(false);
   const quickReactions = ["👍","❤️","😂","😮","😢","🔥","🚀"];
 
   const wsRef = useRef<WebSocket | null>(null);
+  const shouldReconnectRef = useRef(false);
   const reconnectTimer = useRef<number | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
   const callWindowRef = useRef<Window | null>(null);
@@ -194,6 +515,7 @@ export default function App() {
 
   useEffect(() => { peerRef.current = peer; }, [peer]);
   useEffect(() => { callRef.current = call; }, [call]);
+  useEffect(() => { localStorage.setItem("mas.lang", language); }, [language]);
 
   const scrollToBottom = useCallback(() => {
     setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
@@ -235,7 +557,7 @@ export default function App() {
     const makeDisplay = (locale: string) => {
       try { return new Intl.DisplayNames([locale], { type: "region" }); } catch { return null; }
     };
-    const displayDefault = makeDisplay(navigator.language);
+    const displayDefault = makeDisplay(language);
     const displayRu = makeDisplay("ru");
     const displayUk = makeDisplay("uk");
     const displayEn = makeDisplay("en");
@@ -250,8 +572,8 @@ export default function App() {
           search: `${names.join(" ")} ${item}`.toLowerCase()
         };
       })
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, []);
+      .sort((a, b) => a.name.localeCompare(b.name, language));
+  }, [language]);
 
   const translitToLatin = (value: string) => {
     const map: Record<string, string> = {
@@ -287,6 +609,12 @@ export default function App() {
   const activeCountry = useMemo(() => countryOptions.find((i) => i.code === country), [countryOptions, country]);
   const dialCode = useMemo(() => getCountryCallingCode(country as any), [country]);
   const fullPhone = useMemo(() => `+${dialCode}${localNumber.replace(/\D/g, "")}`, [dialCode, localNumber]);
+
+  const handleLanguageChange = (next: Lang) => {
+    setLanguage(next);
+    setCountryQuery("");
+    setStatus("");
+  };
 
   const isAuthed = Boolean(token);
   const authHeaders = useMemo(
@@ -359,21 +687,17 @@ export default function App() {
       fetch(`${API_URL}/keys`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders },
-        body: JSON.stringify({ publicKey: keys.publicKey, secretKey: keys.secretKey })
+        body: JSON.stringify({ publicKey: keys.publicKey })
       }).catch(() => {});
       return;
     }
     (async () => {
       try {
-        const res = await fetch(`${API_URL}/keys/pair`, { headers: authHeaders });
-        if (res.ok) {
-          const saved = await res.json();
-          if (saved.publicKey && saved.secretKey) {
-            const restored = { publicKey: saved.publicKey, secretKey: saved.secretKey };
-            localStorage.setItem("mas.keys", JSON.stringify(restored));
-            setKeys(restored);
-            return;
-          }
+        const backupRes = await fetch(`${API_URL}/keys/backup`, { headers: authHeaders });
+        if (backupRes.ok) {
+          setBackupAvailable(true);
+          setStatus("Знайдено резервну копію ключа. Введіть MAS PIN у налаштуваннях, щоб відновити її.");
+          return;
         }
       } catch { /* ignore */ }
       const pair = generateKeyPair();
@@ -382,9 +706,45 @@ export default function App() {
     })();
   }, [token, keys, authHeaders]);
 
+  const saveKeyBackup = async () => {
+    if (!keys) { setStatus("Ключі не ініціалізовані."); return; }
+    if (backupPin.length < 8) { setStatus("MAS PIN має містити щонайменше 8 символів."); return; }
+    try {
+      const backup = await createKeyBackupPayload(keys, backupPin);
+      const res = await fetch(`${API_URL}/keys/backup`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", ...authHeaders },
+        body: JSON.stringify({ publicKey: keys.publicKey, backup })
+      });
+      if (!res.ok) { setStatus("Не вдалося зберегти резервну копію ключа."); return; }
+      setBackupAvailable(true);
+      setBackupPin("");
+      setStatus("Резервну копію ключа збережено.");
+    } catch {
+      setStatus("Не вдалося зашифрувати резервну копію ключа.");
+    }
+  };
+
+  const restoreKeyBackup = async () => {
+    if (restorePin.length < 8) { setStatus("Введіть MAS PIN для резервної копії."); return; }
+    try {
+      const res = await fetch(`${API_URL}/keys/backup`, { headers: authHeaders });
+      if (!res.ok) { setStatus("Резервну копію ключа не знайдено."); return; }
+      const data = (await res.json()) as KeyBackupResponse;
+      const restored = await restoreKeysFromBackup(data.publicKey, data.backup, restorePin);
+      localStorage.setItem("mas.keys", JSON.stringify(restored));
+      setKeys(restored);
+      setRestorePin("");
+      setBackupAvailable(true);
+      setStatus("Ключ відновлено.");
+    } catch {
+      setStatus("Не вдалося відновити ключ. Перевірте MAS PIN.");
+    }
+  };
+
   // WebSocket with auto-reconnect
   const connectWebSocket = useCallback(() => {
-    if (!token) return;
+    if (!token || !shouldReconnectRef.current) return;
     if (wsRef.current) {
       const s = wsRef.current.readyState;
       if (s === WebSocket.OPEN || s === WebSocket.CONNECTING) return;
@@ -399,7 +759,14 @@ export default function App() {
     };
 
     ws.onmessage = async (event) => {
-      const { type, payload } = JSON.parse(event.data);
+      let data: { type?: string; payload?: any };
+      try {
+        data = JSON.parse(event.data);
+      } catch {
+        return;
+      }
+      const { type, payload } = data;
+      if (!type || !payload) return;
       if (type === "message.receive") {
         await handleIncomingMessage(payload);
         fetchChats();
@@ -422,6 +789,10 @@ export default function App() {
       }
       if (type === "message.deleted") {
         setMessages((prev) => prev.filter((msg) => msg.id !== payload.id));
+      }
+      if (type === "conversation.deleted") {
+        if (payload.peerId === peerRef.current?.id) setMessages([]);
+        fetchChats();
       }
       if (type === "message.edited") {
         decryptIncoming(payload).then((decrypted) => {
@@ -491,8 +862,10 @@ export default function App() {
     };
 
     ws.onclose = () => {
-      wsRef.current = null;
-      reconnectTimer.current = window.setTimeout(() => connectWebSocket(), 2000);
+      if (wsRef.current === ws) wsRef.current = null;
+      if (shouldReconnectRef.current) {
+        reconnectTimer.current = window.setTimeout(() => connectWebSocket(), 2000);
+      }
     };
 
     ws.onerror = () => {
@@ -502,9 +875,14 @@ export default function App() {
 
   useEffect(() => {
     if (!token) return;
+    shouldReconnectRef.current = true;
     connectWebSocket();
     return () => {
+      shouldReconnectRef.current = false;
       if (reconnectTimer.current) { clearTimeout(reconnectTimer.current); reconnectTimer.current = null; }
+      const ws = wsRef.current;
+      wsRef.current = null;
+      ws?.close();
     };
   }, [token, connectWebSocket]);
 
@@ -544,20 +922,23 @@ export default function App() {
   }, [messages, chatSearch]);
 
   const requestCode = async () => {
-    if (!isValidPhoneNumber(fullPhone)) { setStatus("Невірний номер телефону."); return; }
+    if (!isValidPhoneNumber(fullPhone)) { setStatus(tAuth("invalidPhone")); return false; }
     try {
       const res = await fetch(`${API_URL}/auth/request`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone: fullPhone })
       });
+      if (!res.ok) { setStatus(tAuth("networkError")); return false; }
       const data = await res.json();
       setDevCode(data.devCode ?? "");
-      setStatus("Код надіслано (dev).");
-    } catch { setStatus("Помилка мережі."); }
+      setStatus(data.devCode ? tAuth("codeSentDev") : tAuth("codeSent"));
+      setAuthStep("code");
+      return true;
+    } catch { setStatus(tAuth("networkError")); return false; }
   };
 
   const verifyCode = async () => {
-    if (!isValidPhoneNumber(fullPhone)) { setStatus("Невірний номер телефону."); return; }
+    if (!isValidPhoneNumber(fullPhone)) { setStatus(tAuth("invalidPhone")); return; }
     try {
       const res = await fetch(`${API_URL}/auth/verify`, {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -566,20 +947,101 @@ export default function App() {
       const data = await res.json();
       if (data.token) {
         setToken(data.token); localStorage.setItem("mas.token", data.token);
-        setUser(data.user); setStatus("Авторизація успішна.");
-      } else { setStatus("Код невірний."); }
-    } catch { setStatus("Помилка мережі."); }
+        setUser(data.user); setStatus(tAuth("authSuccess"));
+      } else { setStatus(tAuth("wrongCode")); }
+    } catch { setStatus(tAuth("networkError")); }
   };
+
+  const startQrLogin = useCallback(async () => {
+    try {
+      setStatus(ta("qrWaiting"));
+      setQrSession(null);
+      setQrDataUrl("");
+      const res = await fetch(`${API_URL}/auth/qr/start`, { method: "POST" });
+      if (!res.ok) { setStatus(ta("qrStartFailed")); return; }
+      const data = await res.json() as { qrSessionId?: string; qrPayload?: string; expiresAt?: string };
+      if (!data.qrSessionId || !data.qrPayload || !data.expiresAt) {
+        setStatus(ta("qrStartFailed"));
+        return;
+      }
+      const url = new URL(data.qrPayload);
+      const secret = url.searchParams.get("secret");
+      if (!secret) {
+        setStatus(ta("qrStartFailed"));
+        return;
+      }
+      const dataUrl = await QRCode.toDataURL(data.qrPayload, {
+        width: 224,
+        margin: 1,
+        color: { dark: "#0c0f1a", light: "#ffffff" }
+      });
+      setQrSession({ id: data.qrSessionId, secret, payload: data.qrPayload, expiresAt: data.expiresAt });
+      setQrDataUrl(dataUrl);
+    } catch {
+      setStatus(ta("qrStartFailed"));
+    }
+  }, [ta]);
+
+  useEffect(() => {
+    if (authStep === "qr" && !qrSession && !qrDataUrl) {
+      startQrLogin();
+    }
+  }, [authStep, qrDataUrl, qrSession, startQrLogin]);
+
+  useEffect(() => {
+    if (authStep !== "qr" || !qrSession) return;
+    let stopped = false;
+    const poll = async () => {
+      if (stopped) return;
+      if (Date.now() >= Date.parse(qrSession.expiresAt)) {
+        setStatus(ta("qrExpired"));
+        return;
+      }
+      try {
+        const res = await fetch(
+          `${API_URL}/auth/qr/status/${encodeURIComponent(qrSession.id)}?secret=${encodeURIComponent(qrSession.secret)}`
+        );
+        if (!res.ok) {
+          if (res.status === 404 || res.status === 409) setStatus(ta("qrInvalid"));
+          return;
+        }
+        const data = await res.json() as { status?: string; token?: string; user?: User };
+        if (data.status === "claimed" && data.token && data.user) {
+          stopped = true;
+          setStatus(ta("qrApproved"));
+          setToken(data.token);
+          localStorage.setItem("mas.token", data.token);
+          setUser(data.user);
+          return;
+        }
+        if (data.status === "expired") setStatus(ta("qrExpired"));
+        else if (data.status === "denied" || data.status === "claimed") setStatus(ta("qrInvalid"));
+        else setStatus(ta("qrWaiting"));
+      } catch {
+        setStatus(tAuth("networkError"));
+      }
+    };
+    poll();
+    const timer = window.setInterval(poll, 2000);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }, [authStep, qrSession, tAuth, ta]);
 
   const logout = () => {
     setToken(null); setUser(null); setPeer(null); setMessages([]);
     localStorage.removeItem("mas.token");
-    wsRef.current?.close();
+    shouldReconnectRef.current = false;
+    if (reconnectTimer.current) { clearTimeout(reconnectTimer.current); reconnectTimer.current = null; }
+    const ws = wsRef.current;
+    wsRef.current = null;
+    ws?.close();
   };
 
   const findPeer = async (phone: string) => {
     try {
-      const res = await fetch(`${API_URL}/users/by-phone?phone=${phone}`);
+      const res = await fetch(`${API_URL}/users/by-phone?phone=${encodeURIComponent(phone)}`, { headers: authHeaders });
       if (!res.ok) { setStatus("Користувача не знайдено."); return; }
       const data = (await res.json()) as User;
       setPeer(data); setStatus("Контакт додано.");
@@ -605,7 +1067,7 @@ export default function App() {
 
   const fetchPeerById = async (peerId: string) => {
     try {
-      const res = await fetch(`${API_URL}/users/${peerId}`);
+      const res = await fetch(`${API_URL}/users/${peerId}`, { headers: authHeaders });
       if (!res.ok) return null;
       return (await res.json()) as User;
     } catch { return null; }
@@ -690,6 +1152,7 @@ export default function App() {
   };
 
   const sendReadReceipts = (peerId: string, ids: string[]) => {
+    if (!readReceipts) return;
     if (!ids.length || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
     wsRef.current.send(JSON.stringify({ type: "message.read", payload: { peerId, ids } }));
   };
@@ -708,6 +1171,7 @@ export default function App() {
   };
 
   const sendTyping = () => {
+    if (!typingIndicator) return;
     if (!peer || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
     if (typingTimerRef.current) return;
     wsRef.current.send(JSON.stringify({ type: "typing", payload: { to: peer.id } }));
@@ -807,7 +1271,7 @@ export default function App() {
       const uid = user?.id ?? "";
       const idx = reactions[emoji].indexOf(uid);
       if (idx >= 0) { reactions[emoji].splice(idx, 1); if (!reactions[emoji].length) delete reactions[emoji]; }
-      else { reactions[emoji] = [uid]; }
+      else { reactions[emoji].push(uid); }
       return { ...m, reactions };
     }));
     setReactionPicker(null);
@@ -832,11 +1296,14 @@ export default function App() {
 
   const clearChat = async () => {
     if (!peer || !token) return;
-    if (!confirm("Видалити всі повідомлення з цим контактом?")) return;
+    const choice = window.prompt('Очистити чат: введіть "me" для видалення лише у себе або "both" для видалення у двох учасників.');
+    if (choice !== "me" && choice !== "both") return;
+    if (choice === "both" && !confirm("Видалити весь чат у двох учасників? Цю дію не можна скасувати.")) return;
     try {
-      await fetch(`${API_URL}/messages/${peer.id}`, {
+      const res = await fetch(`${API_URL}/messages/${peer.id}?scope=${choice}`, {
         method: "DELETE", headers: authHeaders
       });
+      if (!res.ok) { setStatus("Помилка очищення чату."); return; }
       setMessages([]);
       fetchChats();
       setStatus("Чат очищено.");
@@ -850,26 +1317,29 @@ export default function App() {
       const bytes = new Uint8Array(await file.arrayBuffer());
       const encrypted = encryptBytes(bytes, keys.secretKey, peer.publicKey);
       const blob = new Blob([fromBase64(encrypted.ciphertext) as any], { type: "application/octet-stream" });
-      const localUrl = URL.createObjectURL(file);
       const form = new FormData();
       form.append("file", blob, `${file.name}.enc`);
+      form.append("peerId", peer.id);
       const res = await fetch(`${API_URL}/files`, {
         method: "POST", headers: authHeaders, body: form
       });
+      if (!res.ok) { setStatus("Помилка завантаження файлу."); return; }
       const data = await res.json();
       await sendMessage("file", "", {
         fileName: file.name, fileType: file.type,
-        fileUrl: `${API_URL}${data.url}`,
-        nonce: encrypted.nonce, localUrl
+        fileId: data.fileId,
+        nonce: encrypted.nonce
       });
     } catch { setStatus("Помилка завантаження файлу."); }
   };
 
   const decryptFile = async (msg: UiMessage) => {
     if (!msg.meta || !keys || !peer) return;
-    if (msg.isMine && msg.meta.localUrl) { window.open(msg.meta.localUrl, "_blank"); return; }
     try {
-      const response = await fetch(msg.meta.fileUrl);
+      const fileUrl = msg.meta.fileId ? `${API_URL}/files/${msg.meta.fileId}` : msg.meta.fileUrl;
+      if (!fileUrl) { setStatus("Файл недоступний."); return; }
+      const response = await fetch(fileUrl, { headers: authHeaders });
+      if (!response.ok) { setStatus("Файл недоступний."); return; }
       const buffer = new Uint8Array(await response.arrayBuffer());
       const decrypted = decryptBytes(
         msg.meta.nonce, toBase64(buffer),
@@ -877,7 +1347,9 @@ export default function App() {
       );
       if (!decrypted) { setStatus("Не вдалося розшифрувати файл."); return; }
       const blobOut = new Blob([decrypted as any], { type: msg.meta.fileType || "application/octet-stream" });
-      window.open(URL.createObjectURL(blobOut), "_blank");
+      const url = URL.createObjectURL(blobOut);
+      window.open(url, "_blank", "noopener,noreferrer");
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch { setStatus("Помилка завантаження файлу."); }
   };
 
@@ -891,8 +1363,7 @@ export default function App() {
     const peerDisplay = peer?.login ?? peer?.phone ?? "Абонент";
     const peerInitial = peerDisplay.slice(0, 1).toUpperCase();
     win.document.head.innerHTML = `
-      <meta charset="UTF-8">
-      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">`;
+      <meta charset="UTF-8">`;
     win.document.body.innerHTML = `
       <style>
         *{box-sizing:border-box;margin:0;padding:0}
@@ -1435,42 +1906,119 @@ export default function App() {
   // -- Render --
   if (!isAuthed) {
     return (
-      <div className="auth">
-        <h1>MAS Secure</h1>
-        <p>Вхід за номером телефону (SMS).</p>
-        <div className="phone-row">
-          <div className="select-wrapper" ref={selectRef}>
-            <button type="button" className="select-trigger" onClick={() => setCountryOpen((p) => !p)}>
-              <span>{activeCountry?.name ?? country} (+{activeCountry?.dial ?? dialCode})</span>
-              <span className="chevron" />
-            </button>
-            {countryOpen && (
-              <div className="select-panel">
-                <input className="select-search" placeholder="Пошук країни або коду"
-                  value={countryQuery} onChange={(e) => setCountryQuery(e.target.value)} />
-                <div className="select-list">
-                  {filteredCountries.map((item) => (
-                    <button type="button" key={item.code}
-                      className={`select-item ${item.code === country ? "active" : ""}`}
-                      onClick={() => { setCountry(item.code); setCountryOpen(false); }}>
-                      <span>{item.name}</span>
-                      <span className="dial">+{item.dial}</span>
-                    </button>
-                  ))}
-                  {filteredCountries.length === 0 && <div className="select-empty">Нічого не знайдено</div>}
-                </div>
-              </div>
+      <div className="auth-shell">
+        <div className="auth">
+          <div className="auth-step-head">
+            {authStep !== "language" && (
+              <button type="button" className="auth-back" onClick={() => {
+                setStatus("");
+                if (authStep === "method") setAuthStep("language");
+                else if (authStep === "code") setAuthStep("phone");
+                else setAuthStep("method");
+                if (authStep === "qr") { setQrSession(null); setQrDataUrl(""); }
+              }}>
+                {ta("back")}
+              </button>
             )}
+            <h1>{tAuth("appName")}</h1>
+            <p>
+              {authStep === "language" && ta("chooseLanguage")}
+              {authStep === "method" && ta("chooseSignIn")}
+              {authStep === "phone" && tAuth("authSubtitle")}
+              {authStep === "code" && ta("codeTitle")}
+              {authStep === "qr" && ta("qrTitle")}
+            </p>
           </div>
-          <input placeholder="Номер" value={localNumber} onChange={(e) => setLocalNumber(e.target.value)} />
+
+          {authStep === "language" && (
+            <>
+              <select className="language-select auth-language" value={language}
+                onChange={(e) => handleLanguageChange(e.target.value as Lang)}
+                aria-label={tAuth("language")}>
+                {languageOptions.map((item) => (
+                  <option key={item} value={item}>{languageLabels[item]}</option>
+                ))}
+              </select>
+              <button onClick={() => setAuthStep("method")}>{ta("next")}</button>
+            </>
+          )}
+
+          {authStep === "method" && (
+            <div className="auth-methods">
+              <button type="button" className="auth-method" onClick={() => { setStatus(""); setAuthStep("phone"); }}>
+                <span>{ta("phoneMethod")}</span>
+                <small>{ta("phoneMethodHint")}</small>
+              </button>
+              <button type="button" className="auth-method" onClick={() => { setStatus(""); setAuthStep("qr"); }}>
+                <span>{ta("qrMethod")}</span>
+                <small>{ta("qrMethodHint")}</small>
+              </button>
+            </div>
+          )}
+
+          {authStep === "phone" && (
+            <>
+              <div className="phone-row">
+                <div className="select-wrapper" ref={selectRef}>
+                  <button type="button" className="select-trigger" onClick={() => setCountryOpen((p) => !p)}>
+                    <span>{activeCountry?.name ?? country} (+{activeCountry?.dial ?? dialCode})</span>
+                    <span className="chevron" />
+                  </button>
+                  {countryOpen && (
+                    <div className="select-panel">
+                      <input className="select-search" placeholder={tAuth("countrySearch")}
+                        value={countryQuery} onChange={(e) => setCountryQuery(e.target.value)} />
+                      <div className="select-list">
+                        {filteredCountries.map((item) => (
+                          <button type="button" key={item.code}
+                            className={`select-item ${item.code === country ? "active" : ""}`}
+                            onClick={() => { setCountry(item.code); setCountryOpen(false); }}>
+                            <span>{item.name}</span>
+                            <span className="dial">+{item.dial}</span>
+                          </button>
+                        ))}
+                        {filteredCountries.length === 0 && <div className="select-empty">{tAuth("nothingFound")}</div>}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <input placeholder={tAuth("phoneNumber")} value={localNumber} onChange={(e) => setLocalNumber(e.target.value)} />
+              </div>
+              <div className="auth-meta">
+                <span className="hint">{tAuth("fullNumber")}: {fullPhone}</span>
+              </div>
+              <button onClick={requestCode}>{ta("confirmPhone")}</button>
+            </>
+          )}
+
+          {authStep === "code" && (
+            <>
+              <p className="auth-copy">{ta("codeHint")}</p>
+              <div className="auth-meta">
+                <span className="hint">{tAuth("fullNumber")}: {fullPhone}</span>
+                <span className={`hint auth-dev ${devCode ? "" : "empty"}`}>{devCode ? `${tAuth("devCode")}: ${devCode}` : " "}</span>
+              </div>
+              <input placeholder={tAuth("code")} value={code} onChange={(e) => setCode(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") verifyCode(); }} autoFocus />
+              <button onClick={verifyCode}>{tAuth("signIn")}</button>
+              <button type="button" className="auth-secondary" onClick={() => { setCode(""); setStatus(""); setAuthStep("phone"); }}>
+                {ta("changePhone")}
+              </button>
+            </>
+          )}
+
+          {authStep === "qr" && (
+            <>
+              <p className="auth-copy">{ta("qrHint")}</p>
+              <div className="auth-qr-frame">
+                {qrDataUrl ? <img className="auth-qr-image" src={qrDataUrl} alt={ta("qrTitle")} /> : <div className="auth-qr-loading" />}
+              </div>
+              <button type="button" className="auth-secondary" onClick={startQrLogin}>{ta("qrRetry")}</button>
+            </>
+          )}
+
+          <div className={`status auth-status ${status ? "" : "empty"}`}>{status || " "}</div>
         </div>
-        <span className="hint">Повний номер: {fullPhone}</span>
-        <button onClick={requestCode}>Отримати код</button>
-        {devCode && <span className="hint">Dev-код: {devCode}</span>}
-        <input placeholder="Код" value={code} onChange={(e) => setCode(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") verifyCode(); }} />
-        <button onClick={verifyCode}>Увійти</button>
-        {status && <div className="status">{status}</div>}
       </div>
     );
   }
@@ -1800,6 +2348,29 @@ export default function App() {
                 <div className="settings-row">
                   <span>Сеанс</span>
                   <button className="ghost" onClick={logout}>Вийти</button>
+                </div>
+              </section>
+              <section className="settings-section">
+                <h3>Ключі</h3>
+                <div className="settings-row">
+                  <span>Резервна копія</span>
+                  <span className="muted">{backupAvailable ? "Доступна" : "Не створена"}</span>
+                </div>
+                <label className="settings-row column">
+                  <span>MAS PIN</span>
+                  <input type="password" value={backupPin} onChange={(e) => setBackupPin(e.target.value)} />
+                </label>
+                <div className="settings-row">
+                  <span>Зберегти ключ</span>
+                  <button className="ghost" onClick={saveKeyBackup}>Зберегти</button>
+                </div>
+                <label className="settings-row column">
+                  <span>PIN для відновлення</span>
+                  <input type="password" value={restorePin} onChange={(e) => setRestorePin(e.target.value)} />
+                </label>
+                <div className="settings-row">
+                  <span>Відновити ключ</span>
+                  <button className="ghost" onClick={restoreKeyBackup}>Відновити</button>
                 </div>
               </section>
               <section className="settings-section">

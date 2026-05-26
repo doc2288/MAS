@@ -6,9 +6,15 @@
     "orientation": "portrait",
     "platforms": [
       "ios",
-      "android",
-      "web"
+      "android"
     ],
-    "userInterfaceStyle": "dark"
+    "userInterfaceStyle": "dark",
+    "android": {
+      "package": "com.mas.secure",
+      "permissions": [
+        "CAMERA"
+      ],
+      "usesCleartextTraffic": true
+    }
   }
 }

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import * as QRCode from "qrcode";
 import {
   decryptBytes,
   decryptMessage,
@@ -57,8 +58,348 @@ type CallState = {
   isVideo?: boolean;
 };
 
+type KeyPairState = { publicKey: string; secretKey: string };
+
+type KeyBackupPayload = {
+  ciphertext: string;
+  salt: string;
+  nonce: string;
+  kdf: "PBKDF2-SHA256";
+  iterations: number;
+  updatedAt?: string;
+};
+
+type KeyBackupResponse = {
+  publicKey: string;
+  backup: KeyBackupPayload;
+};
+
+type Lang = "en" | "ru" | "uk" | "no";
+type TranslationKey =
+  | "appName" | "authSubtitle" | "countrySearch" | "nothingFound" | "phoneNumber" | "fullNumber"
+  | "requestCode" | "devCode" | "code" | "signIn" | "chatsSearch" | "people" | "noChats"
+  | "file" | "sticker" | "emoji" | "encryptedMessage" | "settings" | "program" | "notifications"
+  | "language" | "account" | "login" | "loginPlaceholder" | "uniqueLogin" | "save"
+  | "phone" | "session" | "logout" | "keys" | "backup" | "available" | "notCreated"
+  | "masPin" | "saveKey" | "restorePin" | "restoreKey" | "privacy" | "readReceipts"
+  | "typingIndicator" | "search" | "searchChat" | "clearChat" | "videoCall" | "audioCall"
+  | "online" | "typing" | "incomingVideoCall" | "incomingCall" | "accept" | "decline"
+  | "activeCall" | "end" | "chatPlaceholder" | "found" | "you" | "delete" | "reply"
+  | "edit" | "copy" | "pin" | "unpin" | "emojiSearch" | "editing" | "edited" | "message"
+  | "attachFile" | "pinnedMessage" | "noKeysEncrypted" | "wrongKeyEncrypted" | "loginRequired"
+  | "loginTaken" | "loginSaveFailed" | "loginUpdated" | "networkError" | "backupFound"
+  | "keysNotReady" | "pinTooShort" | "backupSaveFailed" | "backupSaved" | "backupEncryptFailed"
+  | "backupPinRequired" | "backupMissing" | "keyRestored" | "keyRestoreFailed"
+  | "invalidPhone" | "codeSentDev" | "codeSent" | "authSuccess" | "wrongCode"
+  | "userNotFound" | "contactAdded" | "chooseChat" | "noConnection" | "peerNoPublicKey"
+  | "copied" | "clearPrompt" | "clearBothConfirm" | "clearFailed" | "chatCleared"
+  | "uploadFailed" | "fileUnavailable" | "fileDecryptFailed" | "callWindowTitle"
+  | "subscriber" | "microphone" | "camera" | "screenShare" | "fullscreen" | "screen"
+  | "screenSharing" | "call" | "connecting" | "videoCallUpper" | "audioCallUpper"
+  | "activeCallStatus" | "calling" | "cameraEnableFailed" | "callStartFailed"
+  | "peerMissing" | "callAcceptFailed" | "notificationPermissionDenied" | "notificationUnsupported"
+  | "notificationTitle";
+
+const translations: Record<Lang, Record<TranslationKey, string>> = {
+  en: {
+    appName: "MAS Secure", authSubtitle: "Sign in with your phone number (SMS).",
+    countrySearch: "Search country or code", nothingFound: "Nothing found", phoneNumber: "Phone number",
+    fullNumber: "Full number", requestCode: "Get code", devCode: "Dev code", code: "Code", signIn: "Sign in",
+    chatsSearch: "Search chats", people: "People", noChats: "No chats found", file: "File", sticker: "Sticker",
+    emoji: "Emoji", encryptedMessage: "Encrypted message", settings: "Settings", program: "App",
+    notifications: "Notifications", language: "Language", account: "Account", login: "Login",
+    loginPlaceholder: "for example: mas_user", uniqueLogin: "Unique login", save: "Save", phone: "Phone number",
+    session: "Session", logout: "Log out", keys: "Keys", backup: "Backup", available: "Available",
+    notCreated: "Not created", masPin: "MAS PIN", saveKey: "Save key", restorePin: "Restore PIN",
+    restoreKey: "Restore key", privacy: "Privacy", readReceipts: "Read receipts", typingIndicator: "Typing indicator",
+    search: "Search", searchChat: "Search in chat", clearChat: "Clear chat", videoCall: "Video call",
+    audioCall: "Call", online: "online", typing: "typing...", incomingVideoCall: "Incoming video call",
+    incomingCall: "Incoming call", accept: "Accept", decline: "Decline", activeCall: "Call active", end: "End",
+    chatPlaceholder: "Choose a chat or find a contact with search", found: "found", you: "You", delete: "Delete",
+    reply: "Reply", edit: "Edit", copy: "Copy", pin: "Pin", unpin: "Unpin", emojiSearch: "Search emoji...",
+    editing: "Editing", edited: "edited", message: "Message", attachFile: "Upload file", pinnedMessage: "pinned message",
+    noKeysEncrypted: "No encryption keys", wrongKeyEncrypted: "Message was encrypted with another key",
+    loginRequired: "Enter a login.", loginTaken: "Login is already taken.", loginSaveFailed: "Could not save login.",
+    loginUpdated: "Login updated.", networkError: "Network error.", backupFound: "Key backup found. Enter your MAS PIN in Settings to restore it.",
+    keysNotReady: "Keys are not initialized.", pinTooShort: "MAS PIN must contain at least 8 characters.",
+    backupSaveFailed: "Could not save key backup.", backupSaved: "Key backup saved.",
+    backupEncryptFailed: "Could not encrypt key backup.", backupPinRequired: "Enter the MAS PIN for the backup.",
+    backupMissing: "Key backup was not found.", keyRestored: "Key restored.",
+    keyRestoreFailed: "Could not restore key. Check your MAS PIN.", invalidPhone: "Invalid phone number.",
+    codeSentDev: "Code sent (dev).", codeSent: "Code sent.", authSuccess: "Signed in successfully.",
+    wrongCode: "The code is incorrect.", userNotFound: "User not found.", contactAdded: "Contact added.",
+    chooseChat: "Choose a chat.", noConnection: "No connection.", peerNoPublicKey: "The contact has no public key.",
+    copied: "Copied.", clearPrompt: "Clear chat: type \"me\" to delete only for yourself or \"both\" to delete for both participants.",
+    clearBothConfirm: "Delete the whole chat for both participants? This cannot be undone.",
+    clearFailed: "Could not clear chat.", chatCleared: "Chat cleared.", uploadFailed: "File upload failed.",
+    fileUnavailable: "File unavailable.", fileDecryptFailed: "Could not decrypt file.", callWindowTitle: "MAS - Call",
+    subscriber: "Contact", microphone: "Microphone", camera: "Camera", screenShare: "Screen sharing",
+    fullscreen: "Fullscreen", screen: "Screen", screenSharing: "Screen sharing", call: "Call", connecting: "Connecting...",
+    videoCallUpper: "VIDEO CALL", audioCallUpper: "AUDIO CALL", activeCallStatus: "Active call", calling: "Calling...",
+    cameraEnableFailed: "Could not enable camera.", callStartFailed: "Could not start the call. Check microphone access.",
+    peerMissing: "Contact data is missing.", callAcceptFailed: "Could not accept the call. Check microphone access.",
+    notificationPermissionDenied: "Browser notifications are blocked.", notificationUnsupported: "This browser does not support notifications.",
+    notificationTitle: "New message"
+  },
+  ru: {
+    appName: "MAS Secure", authSubtitle: "Вход по номеру телефона (SMS).",
+    countrySearch: "Поиск страны или кода", nothingFound: "Ничего не найдено", phoneNumber: "Номер",
+    fullNumber: "Полный номер", requestCode: "Получить код", devCode: "Dev-код", code: "Код", signIn: "Войти",
+    chatsSearch: "Поиск чатов", people: "Люди", noChats: "Чаты не найдены", file: "Файл", sticker: "Стикер",
+    emoji: "Эмодзи", encryptedMessage: "Зашифрованное сообщение", settings: "Настройки", program: "Приложение",
+    notifications: "Уведомления", language: "Язык", account: "Аккаунт", login: "Логин",
+    loginPlaceholder: "например: mas_user", uniqueLogin: "Уникальный логин", save: "Сохранить", phone: "Номер телефона",
+    session: "Сеанс", logout: "Выйти", keys: "Ключи", backup: "Резервная копия", available: "Доступна",
+    notCreated: "Не создана", masPin: "MAS PIN", saveKey: "Сохранить ключ", restorePin: "PIN для восстановления",
+    restoreKey: "Восстановить ключ", privacy: "Приватность", readReceipts: "Отчёты о прочтении", typingIndicator: "Индикатор набора",
+    search: "Поиск", searchChat: "Поиск в чате", clearChat: "Очистить чат", videoCall: "Видеозвонок",
+    audioCall: "Звонок", online: "онлайн", typing: "печатает...", incomingVideoCall: "Входящий видеозвонок",
+    incomingCall: "Входящий звонок", accept: "Принять", decline: "Отклонить", activeCall: "Звонок активен", end: "Завершить",
+    chatPlaceholder: "Выберите чат или найдите контакт через поиск", found: "найдено", you: "Вы", delete: "Удалить",
+    reply: "Ответить", edit: "Редактировать", copy: "Копировать", pin: "Закрепить", unpin: "Открепить", emojiSearch: "Поиск эмодзи...",
+    editing: "Редактирование", edited: "ред.", message: "Сообщение", attachFile: "Загрузить файл", pinnedMessage: "закреплённое сообщение",
+    noKeysEncrypted: "Нет ключей шифрования", wrongKeyEncrypted: "Сообщение зашифровано другим ключом",
+    loginRequired: "Укажите логин.", loginTaken: "Логин уже занят.", loginSaveFailed: "Не удалось сохранить логин.",
+    loginUpdated: "Логин обновлён.", networkError: "Ошибка сети.", backupFound: "Найдена резервная копия ключа. Введите MAS PIN в настройках, чтобы восстановить её.",
+    keysNotReady: "Ключи не инициализированы.", pinTooShort: "MAS PIN должен содержать минимум 8 символов.",
+    backupSaveFailed: "Не удалось сохранить резервную копию ключа.", backupSaved: "Резервная копия ключа сохранена.",
+    backupEncryptFailed: "Не удалось зашифровать резервную копию ключа.", backupPinRequired: "Введите MAS PIN для резервной копии.",
+    backupMissing: "Резервная копия ключа не найдена.", keyRestored: "Ключ восстановлен.",
+    keyRestoreFailed: "Не удалось восстановить ключ. Проверьте MAS PIN.", invalidPhone: "Неверный номер телефона.",
+    codeSentDev: "Код отправлен (dev).", codeSent: "Код отправлен.", authSuccess: "Авторизация успешна.",
+    wrongCode: "Код неверный.", userNotFound: "Пользователь не найден.", contactAdded: "Контакт добавлен.",
+    chooseChat: "Выберите чат.", noConnection: "Нет соединения.", peerNoPublicKey: "У контакта нет публичного ключа.",
+    copied: "Скопировано.", clearPrompt: "Очистить чат: введите \"me\", чтобы удалить только у себя, или \"both\", чтобы удалить у обоих участников.",
+    clearBothConfirm: "Удалить весь чат у обоих участников? Это действие нельзя отменить.",
+    clearFailed: "Ошибка очистки чата.", chatCleared: "Чат очищен.", uploadFailed: "Ошибка загрузки файла.",
+    fileUnavailable: "Файл недоступен.", fileDecryptFailed: "Не удалось расшифровать файл.", callWindowTitle: "MAS - Звонок",
+    subscriber: "Абонент", microphone: "Микрофон", camera: "Камера", screenShare: "Демонстрация экрана",
+    fullscreen: "На весь экран", screen: "Экран", screenSharing: "Демонстрация экрана", call: "Звонок", connecting: "Соединение...",
+    videoCallUpper: "ВИДЕОЗВОНОК", audioCallUpper: "АУДИОЗВОНОК", activeCallStatus: "Активный звонок", calling: "Вызов...",
+    cameraEnableFailed: "Не удалось включить камеру.", callStartFailed: "Не удалось запустить звонок. Проверьте доступ к микрофону.",
+    peerMissing: "Нет данных собеседника.", callAcceptFailed: "Не удалось принять звонок. Проверьте доступ к микрофону.",
+    notificationPermissionDenied: "Уведомления браузера заблокированы.", notificationUnsupported: "Этот браузер не поддерживает уведомления.",
+    notificationTitle: "Новое сообщение"
+  },
+  uk: {
+    appName: "MAS Secure", authSubtitle: "Вхід за номером телефону (SMS).",
+    countrySearch: "Пошук країни або коду", nothingFound: "Нічого не знайдено", phoneNumber: "Номер",
+    fullNumber: "Повний номер", requestCode: "Отримати код", devCode: "Dev-код", code: "Код", signIn: "Увійти",
+    chatsSearch: "Пошук чатів", people: "Люди", noChats: "Чатів не знайдено", file: "Файл", sticker: "Стікер",
+    emoji: "Емодзі", encryptedMessage: "Зашифроване повідомлення", settings: "Налаштування", program: "Програма",
+    notifications: "Сповіщення", language: "Мова", account: "Акаунт", login: "Логін",
+    loginPlaceholder: "наприклад: mas_user", uniqueLogin: "Унікальний логін", save: "Зберегти", phone: "Номер телефону",
+    session: "Сеанс", logout: "Вийти", keys: "Ключі", backup: "Резервна копія", available: "Доступна",
+    notCreated: "Не створена", masPin: "MAS PIN", saveKey: "Зберегти ключ", restorePin: "PIN для відновлення",
+    restoreKey: "Відновити ключ", privacy: "Конфіденційність", readReceipts: "Звіти про прочитання", typingIndicator: "Індикатор набору",
+    search: "Пошук", searchChat: "Пошук в чаті", clearChat: "Очистити чат", videoCall: "Відеодзвінок",
+    audioCall: "Дзвінок", online: "онлайн", typing: "друкує...", incomingVideoCall: "Вхідний відеодзвінок",
+    incomingCall: "Вхідний дзвінок", accept: "Прийняти", decline: "Відхилити", activeCall: "Дзвінок активний", end: "Завершити",
+    chatPlaceholder: "Оберіть чат або знайдіть контакт через пошук", found: "знайдено", you: "Ви", delete: "Видалити",
+    reply: "Відповісти", edit: "Редагувати", copy: "Копіювати", pin: "Закріпити", unpin: "Відкріпити", emojiSearch: "Пошук емодзі...",
+    editing: "Редагування", edited: "ред.", message: "Повідомлення", attachFile: "Завантажити файл", pinnedMessage: "закріплене повідомлення",
+    noKeysEncrypted: "Немає ключів шифрування", wrongKeyEncrypted: "Повідомлення зашифроване іншим ключем",
+    loginRequired: "Вкажіть логін.", loginTaken: "Логін уже зайнятий.", loginSaveFailed: "Не вдалося зберегти логін.",
+    loginUpdated: "Логін оновлено.", networkError: "Помилка мережі.", backupFound: "Знайдено резервну копію ключа. Введіть MAS PIN у налаштуваннях, щоб відновити її.",
+    keysNotReady: "Ключі не ініціалізовані.", pinTooShort: "MAS PIN має містити щонайменше 8 символів.",
+    backupSaveFailed: "Не вдалося зберегти резервну копію ключа.", backupSaved: "Резервну копію ключа збережено.",
+    backupEncryptFailed: "Не вдалося зашифрувати резервну копію ключа.", backupPinRequired: "Введіть MAS PIN для резервної копії.",
+    backupMissing: "Резервну копію ключа не знайдено.", keyRestored: "Ключ відновлено.",
+    keyRestoreFailed: "Не вдалося відновити ключ. Перевірте MAS PIN.", invalidPhone: "Невірний номер телефону.",
+    codeSentDev: "Код надіслано (dev).", codeSent: "Код надіслано.", authSuccess: "Авторизація успішна.",
+    wrongCode: "Код невірний.", userNotFound: "Користувача не знайдено.", contactAdded: "Контакт додано.",
+    chooseChat: "Оберіть чат.", noConnection: "Немає з'єднання.", peerNoPublicKey: "У контакта немає публічного ключа.",
+    copied: "Скопійовано.", clearPrompt: "Очистити чат: введіть \"me\" для видалення лише у себе або \"both\" для видалення у двох учасників.",
+    clearBothConfirm: "Видалити весь чат у двох учасників? Цю дію не можна скасувати.",
+    clearFailed: "Помилка очищення чату.", chatCleared: "Чат очищено.", uploadFailed: "Помилка завантаження файлу.",
+    fileUnavailable: "Файл недоступний.", fileDecryptFailed: "Не вдалося розшифрувати файл.", callWindowTitle: "MAS - Дзвінок",
+    subscriber: "Абонент", microphone: "Мікрофон", camera: "Камера", screenShare: "Демонстрація екрану",
+    fullscreen: "На весь екран", screen: "Екран", screenSharing: "Трансляція екрану", call: "Дзвінок", connecting: "З'єднання...",
+    videoCallUpper: "ВІДЕОДЗВІНОК", audioCallUpper: "АУДІОДЗВІНОК", activeCallStatus: "Активний дзвінок", calling: "Виклик...",
+    cameraEnableFailed: "Не вдалося увімкнути камеру.", callStartFailed: "Не вдалося запустити дзвінок. Перевірте доступ до мікрофона.",
+    peerMissing: "Немає даних співрозмовника.", callAcceptFailed: "Не вдалося прийняти дзвінок. Перевірте доступ до мікрофона.",
+    notificationPermissionDenied: "Сповіщення браузера заблоковані.", notificationUnsupported: "Цей браузер не підтримує сповіщення.",
+    notificationTitle: "Нове повідомлення"
+  },
+  no: {
+    appName: "MAS Secure", authSubtitle: "Logg inn med telefonnummer (SMS).",
+    countrySearch: "Søk etter land eller kode", nothingFound: "Ingen treff", phoneNumber: "Telefonnummer",
+    fullNumber: "Fullt nummer", requestCode: "Hent kode", devCode: "Dev-kode", code: "Kode", signIn: "Logg inn",
+    chatsSearch: "Søk i chatter", people: "Personer", noChats: "Ingen chatter funnet", file: "Fil", sticker: "Klistremerke",
+    emoji: "Emoji", encryptedMessage: "Kryptert melding", settings: "Innstillinger", program: "App",
+    notifications: "Varsler", language: "Språk", account: "Konto", login: "Brukernavn",
+    loginPlaceholder: "for eksempel: mas_user", uniqueLogin: "Unikt brukernavn", save: "Lagre", phone: "Telefonnummer",
+    session: "Økt", logout: "Logg ut", keys: "Nøkler", backup: "Sikkerhetskopi", available: "Tilgjengelig",
+    notCreated: "Ikke opprettet", masPin: "MAS PIN", saveKey: "Lagre nøkkel", restorePin: "PIN for gjenoppretting",
+    restoreKey: "Gjenopprett nøkkel", privacy: "Personvern", readReceipts: "Lesebekreftelser", typingIndicator: "Skriveindikator",
+    search: "Søk", searchChat: "Søk i chat", clearChat: "Tøm chat", videoCall: "Videosamtale",
+    audioCall: "Samtale", online: "pålogget", typing: "skriver...", incomingVideoCall: "Innkommende videosamtale",
+    incomingCall: "Innkommende samtale", accept: "Svar", decline: "Avvis", activeCall: "Samtale aktiv", end: "Avslutt",
+    chatPlaceholder: "Velg en chat eller finn en kontakt med søk", found: "funnet", you: "Du", delete: "Slett",
+    reply: "Svar", edit: "Rediger", copy: "Kopier", pin: "Fest", unpin: "Løsne", emojiSearch: "Søk etter emoji...",
+    editing: "Redigering", edited: "red.", message: "Melding", attachFile: "Last opp fil", pinnedMessage: "festet melding",
+    noKeysEncrypted: "Ingen krypteringsnøkler", wrongKeyEncrypted: "Meldingen ble kryptert med en annen nøkkel",
+    loginRequired: "Skriv inn brukernavn.", loginTaken: "Brukernavnet er opptatt.", loginSaveFailed: "Kunne ikke lagre brukernavn.",
+    loginUpdated: "Brukernavn oppdatert.", networkError: "Nettverksfeil.", backupFound: "Nøkkelsikkerhetskopi funnet. Skriv inn MAS PIN i Innstillinger for å gjenopprette den.",
+    keysNotReady: "Nøkler er ikke initialisert.", pinTooShort: "MAS PIN må inneholde minst 8 tegn.",
+    backupSaveFailed: "Kunne ikke lagre nøkkelsikkerhetskopi.", backupSaved: "Nøkkelsikkerhetskopi lagret.",
+    backupEncryptFailed: "Kunne ikke kryptere nøkkelsikkerhetskopi.", backupPinRequired: "Skriv inn MAS PIN for sikkerhetskopien.",
+    backupMissing: "Nøkkelsikkerhetskopi ble ikke funnet.", keyRestored: "Nøkkel gjenopprettet.",
+    keyRestoreFailed: "Kunne ikke gjenopprette nøkkel. Sjekk MAS PIN.", invalidPhone: "Ugyldig telefonnummer.",
+    codeSentDev: "Kode sendt (dev).", codeSent: "Kode sendt.", authSuccess: "Innlogging vellykket.",
+    wrongCode: "Koden er feil.", userNotFound: "Bruker ikke funnet.", contactAdded: "Kontakt lagt til.",
+    chooseChat: "Velg en chat.", noConnection: "Ingen forbindelse.", peerNoPublicKey: "Kontakten har ingen offentlig nøkkel.",
+    copied: "Kopiert.", clearPrompt: "Tøm chat: skriv \"me\" for å slette bare hos deg eller \"both\" for å slette hos begge deltakere.",
+    clearBothConfirm: "Slette hele chatten hos begge deltakere? Dette kan ikke angres.",
+    clearFailed: "Kunne ikke tømme chat.", chatCleared: "Chat tømt.", uploadFailed: "Filopplasting feilet.",
+    fileUnavailable: "Fil utilgjengelig.", fileDecryptFailed: "Kunne ikke dekryptere fil.", callWindowTitle: "MAS - Samtale",
+    subscriber: "Kontakt", microphone: "Mikrofon", camera: "Kamera", screenShare: "Skjermdeling",
+    fullscreen: "Fullskjerm", screen: "Skjerm", screenSharing: "Skjermdeling", call: "Samtale", connecting: "Kobler til...",
+    videoCallUpper: "VIDEOSAMTALE", audioCallUpper: "LYDSAMTALE", activeCallStatus: "Aktiv samtale", calling: "Ringer...",
+    cameraEnableFailed: "Kunne ikke slå på kamera.", callStartFailed: "Kunne ikke starte samtalen. Sjekk mikrofontilgang.",
+    peerMissing: "Kontaktdata mangler.", callAcceptFailed: "Kunne ikke svare på samtalen. Sjekk mikrofontilgang.",
+    notificationPermissionDenied: "Nettleservarsler er blokkert.", notificationUnsupported: "Denne nettleseren støtter ikke varsler.",
+    notificationTitle: "Ny melding"
+  }
+};
+
+const languageLabels: Record<Lang, string> = {
+  en: "English",
+  ru: "Русский",
+  uk: "Українська",
+  no: "Norsk"
+};
+const languageOptions: Lang[] = ["en", "ru", "uk", "no"];
+
+type AuthStep = "language" | "method" | "phone" | "code" | "qr";
+type AuthFlowKey =
+  | "chooseLanguage"
+  | "next"
+  | "back"
+  | "chooseSignIn"
+  | "phoneMethod"
+  | "phoneMethodHint"
+  | "qrMethod"
+  | "qrMethodHint"
+  | "confirmPhone"
+  | "codeTitle"
+  | "codeHint"
+  | "changePhone"
+  | "qrTitle"
+  | "qrHint"
+  | "qrWaiting"
+  | "qrExpired"
+  | "qrRetry"
+  | "qrStartFailed"
+  | "qrApproved"
+  | "qrInvalid";
+
+const authFlowText: Record<Lang, Record<AuthFlowKey, string>> = {
+  en: {
+    chooseLanguage: "Choose your language",
+    next: "Next",
+    back: "Back",
+    chooseSignIn: "Choose how to sign in",
+    phoneMethod: "Phone number",
+    phoneMethodHint: "Get an SMS code for this device.",
+    qrMethod: "QR code",
+    qrMethodHint: "Approve this login from your mobile MAS app.",
+    confirmPhone: "Confirm phone",
+    codeTitle: "Enter the code",
+    codeHint: "We sent a one-time code to your phone.",
+    changePhone: "Change phone",
+    qrTitle: "Scan with MAS Mobile",
+    qrHint: "Open MAS on your phone and approve this login.",
+    qrWaiting: "Waiting for mobile approval...",
+    qrExpired: "QR code expired.",
+    qrRetry: "Create new QR",
+    qrStartFailed: "Could not create QR login.",
+    qrApproved: "QR approved. Signing in...",
+    qrInvalid: "QR login is no longer available."
+  },
+  ru: {
+    chooseLanguage: "Выберите язык",
+    next: "Далее",
+    back: "Назад",
+    chooseSignIn: "Выберите способ входа",
+    phoneMethod: "Номер телефона",
+    phoneMethodHint: "Получить SMS-код для этого устройства.",
+    qrMethod: "QR-код",
+    qrMethodHint: "Подтвердить вход в мобильном MAS.",
+    confirmPhone: "Подтвердить номер",
+    codeTitle: "Введите код",
+    codeHint: "Мы отправили одноразовый код на ваш телефон.",
+    changePhone: "Изменить номер",
+    qrTitle: "Сканируйте в MAS Mobile",
+    qrHint: "Откройте MAS на телефоне и подтвердите этот вход.",
+    qrWaiting: "Ожидаем подтверждение с телефона...",
+    qrExpired: "QR-код истёк.",
+    qrRetry: "Создать новый QR",
+    qrStartFailed: "Не удалось создать QR-вход.",
+    qrApproved: "QR подтверждён. Выполняем вход...",
+    qrInvalid: "QR-вход больше недоступен."
+  },
+  uk: {
+    chooseLanguage: "Оберіть мову",
+    next: "Далі",
+    back: "Назад",
+    chooseSignIn: "Оберіть спосіб входу",
+    phoneMethod: "Номер телефону",
+    phoneMethodHint: "Отримати SMS-код для цього пристрою.",
+    qrMethod: "QR-код",
+    qrMethodHint: "Підтвердити вхід у мобільному MAS.",
+    confirmPhone: "Підтвердити номер",
+    codeTitle: "Введіть код",
+    codeHint: "Ми надіслали одноразовий код на ваш телефон.",
+    changePhone: "Змінити номер",
+    qrTitle: "Скануйте в MAS Mobile",
+    qrHint: "Відкрийте MAS на телефоні та підтвердьте цей вхід.",
+    qrWaiting: "Очікуємо підтвердження з телефона...",
+    qrExpired: "QR-код минув.",
+    qrRetry: "Створити новий QR",
+    qrStartFailed: "Не вдалося створити QR-вхід.",
+    qrApproved: "QR підтверджено. Виконуємо вхід...",
+    qrInvalid: "QR-вхід більше недоступний."
+  },
+  no: {
+    chooseLanguage: "Velg språk",
+    next: "Neste",
+    back: "Tilbake",
+    chooseSignIn: "Velg innloggingsmåte",
+    phoneMethod: "Telefonnummer",
+    phoneMethodHint: "Få en SMS-kode for denne enheten.",
+    qrMethod: "QR-kode",
+    qrMethodHint: "Godkjenn innloggingen fra MAS på mobilen.",
+    confirmPhone: "Bekreft telefon",
+    codeTitle: "Skriv inn koden",
+    codeHint: "Vi sendte en engangskode til telefonen.",
+    changePhone: "Endre telefon",
+    qrTitle: "Skann med MAS Mobile",
+    qrHint: "Åpne MAS på telefonen og godkjenn denne innloggingen.",
+    qrWaiting: "Venter på mobilgodkjenning...",
+    qrExpired: "QR-koden er utløpt.",
+    qrRetry: "Lag ny QR",
+    qrStartFailed: "Kunne ikke opprette QR-innlogging.",
+    qrApproved: "QR godkjent. Logger inn...",
+    qrInvalid: "QR-innloggingen er ikke lenger tilgjengelig."
+  }
+};
+
+const loadLang = (): Lang => {
+  const raw = localStorage.getItem("mas.lang");
+  return raw === "ru" || raw === "uk" || raw === "no" || raw === "en" ? raw : "en";
+};
+
+const loadBool = (key: string, fallback: boolean) => {
+  const raw = localStorage.getItem(key);
+  if (raw === "true") return true;
+  if (raw === "false") return false;
+  return fallback;
+};
+
 const API_URL = "http://localhost:4000";
 const WS_URL = "ws://localhost:4000";
+const KEY_BACKUP_ITERATIONS = 150_000;
 const emojiCategories: Record<string, string[]> = {
   "Обличчя": ["😀","😂","🤣","😍","🥰","😘","😎","🤩","🥳","😏","🤔","🙄","😴","🤯","🥺","😤","😭","😱","🤗","😇"],
   "Жести": ["👍","👎","👋","🤝","🙏","💪","✌️","🤟","👏","🫶","☝️","👆","👇","👉","👈","✋","🤚","🖖","🫡","🫰"],
@@ -71,14 +412,86 @@ const allEmojis = Object.values(emojiCategories).flat();
 const formatTime = (iso: string) =>
   new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
-const formatDate = (iso: string) => {
+const formatDate = (iso: string, lang: Lang) => {
   const d = new Date(iso);
   const today = new Date();
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
-  if (d.toDateString() === today.toDateString()) return "Сьогодні";
-  if (d.toDateString() === yesterday.toDateString()) return "Вчора";
-  return d.toLocaleDateString("uk-UA", { day: "numeric", month: "long", year: "numeric" });
+  if (d.toDateString() === today.toDateString()) {
+    return { en: "Today", ru: "Сегодня", uk: "Сьогодні", no: "I dag" }[lang];
+  }
+  if (d.toDateString() === yesterday.toDateString()) {
+    return { en: "Yesterday", ru: "Вчера", uk: "Вчора", no: "I går" }[lang];
+  }
+  const locale = { en: "en-US", ru: "ru-RU", uk: "uk-UA", no: "nb-NO" }[lang];
+  return d.toLocaleDateString(locale, { day: "numeric", month: "long", year: "numeric" });
+};
+
+const loadStoredKeys = (): KeyPairState | null => {
+  try {
+    const raw = localStorage.getItem("mas.keys");
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<KeyPairState>;
+    return typeof parsed.publicKey === "string" && typeof parsed.secretKey === "string"
+      ? { publicKey: parsed.publicKey, secretKey: parsed.secretKey }
+      : null;
+  } catch {
+    localStorage.removeItem("mas.keys");
+    return null;
+  }
+};
+
+const asArrayBuffer = (bytes: Uint8Array): ArrayBuffer =>
+  bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+
+const deriveBackupKey = async (pin: string, salt: Uint8Array, iterations: number) => {
+  const encoder = new TextEncoder();
+  const material = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(pin),
+    "PBKDF2",
+    false,
+    ["deriveKey"]
+  );
+  return crypto.subtle.deriveKey(
+    { name: "PBKDF2", salt: asArrayBuffer(salt), iterations, hash: "SHA-256" },
+    material,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt", "decrypt"]
+  );
+};
+
+const createKeyBackupPayload = async (keys: KeyPairState, pin: string): Promise<KeyBackupPayload> => {
+  const encoder = new TextEncoder();
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const nonce = crypto.getRandomValues(new Uint8Array(12));
+  const key = await deriveBackupKey(pin, salt, KEY_BACKUP_ITERATIONS);
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv: asArrayBuffer(nonce) },
+    key,
+    encoder.encode(keys.secretKey)
+  );
+  return {
+    ciphertext: toBase64(new Uint8Array(ciphertext)),
+    salt: toBase64(salt),
+    nonce: toBase64(nonce),
+    kdf: "PBKDF2-SHA256",
+    iterations: KEY_BACKUP_ITERATIONS
+  };
+};
+
+const restoreKeysFromBackup = async (publicKey: string, backup: KeyBackupPayload, pin: string): Promise<KeyPairState> => {
+  const key = await deriveBackupKey(pin, fromBase64(backup.salt), backup.iterations);
+  const plaintext = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: asArrayBuffer(fromBase64(backup.nonce)) },
+    key,
+    asArrayBuffer(fromBase64(backup.ciphertext))
+  );
+  return {
+    publicKey,
+    secretKey: new TextDecoder().decode(plaintext)
+  };
 };
 
 const notifSound = (() => {
@@ -114,28 +527,31 @@ export default function App() {
   const [devCode, setDevCode] = useState("");
   const [token, setToken] = useState<string | null>(localStorage.getItem("mas.token"));
   const [user, setUser] = useState<User | null>(null);
-  const [keys, setKeys] = useState<{ publicKey: string; secretKey: string } | null>(
-    () => {
-      const raw = localStorage.getItem("mas.keys");
-      return raw ? (JSON.parse(raw) as { publicKey: string; secretKey: string }) : null;
-    }
-  );
+  const [keys, setKeys] = useState<KeyPairState | null>(() => loadStoredKeys());
+  const [language, setLanguage] = useState<Lang>(() => loadLang());
+  const [authStep, setAuthStep] = useState<AuthStep>("language");
+  const [qrSession, setQrSession] = useState<{
+    id: string;
+    secret: string;
+    payload: string;
+    expiresAt: string;
+  } | null>(null);
+  const [qrDataUrl, setQrDataUrl] = useState("");
   const [peer, setPeer] = useState<User | null>(null);
   const [messages, setMessages] = useState<UiMessage[]>([]);
   const [chatList, setChatList] = useState<ChatSummary[]>([]);
   const [status, setStatus] = useState("");
+  const t = useCallback((key: TranslationKey) => translations[language][key], [language]);
+  const ta = useCallback((key: AuthFlowKey) => authFlowText[language][key], [language]);
   
   const [activeTab, setActiveTab] = useState<"chat" | "settings">("chat");
   const [isMenuOpen, setIsMenuOpen] = useState(true);
   const [chatQuery, setChatQuery] = useState("");
   const [loginValue, setLoginValue] = useState("");
   const [loginMatches, setLoginMatches] = useState<User[]>([]);
-  const [displayName, setDisplayName] = useState("MAS User");
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [startOnBoot, setStartOnBoot] = useState(true);
-  const [readReceipts, setReadReceipts] = useState(true);
-  const [typingIndicator, setTypingIndicator] = useState(true);
-  const [lastSeenVisible, setLastSeenVisible] = useState(true);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(() => loadBool("mas.notifications", true));
+  const [readReceipts, setReadReceipts] = useState(() => loadBool("mas.readReceipts", true));
+  const [typingIndicator, setTypingIndicator] = useState(() => loadBool("mas.typingIndicator", true));
   const [call, setCall] = useState<CallState>({ status: "idle" });
   const [peerTyping, setPeerTyping] = useState(false);
   const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set());
@@ -150,9 +566,13 @@ export default function App() {
   const [reactionPicker, setReactionPicker] = useState<string | null>(null);
   const [emojiCategory, setEmojiCategory] = useState("Обличчя");
   const [emojiSearch, setEmojiSearch] = useState("");
+  const [backupPin, setBackupPin] = useState("");
+  const [restorePin, setRestorePin] = useState("");
+  const [backupAvailable, setBackupAvailable] = useState(false);
   const quickReactions = ["👍","❤️","😂","😮","😢","🔥","🚀"];
 
   const wsRef = useRef<WebSocket | null>(null);
+  const shouldReconnectRef = useRef(false);
   const reconnectTimer = useRef<number | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
   const callWindowRef = useRef<Window | null>(null);
@@ -182,18 +602,12 @@ export default function App() {
   const callRef = useRef<CallState>({ status: "idle" });
   const screenShareRef = useRef<{ stream: MediaStream; originalTrack: MediaStreamTrack | null; sender: RTCRtpSender | null } | null>(null);
 
-  const devices = [
-    { name: "MAS Desktop", location: "Windows · Локально", lastActive: "Активний зараз" },
-    { name: "MAS Web", location: "Chrome · Київ", lastActive: "2 хв тому" }
-  ];
-  const activityLog = [
-    { title: "Вхід у акаунт", time: "Сьогодні, 09:12" },
-    { title: "Зміна статусу", time: "Сьогодні, 09:05" },
-    { title: "Надіслано файл", time: "Вчора, 21:40" }
-  ];
-
   useEffect(() => { peerRef.current = peer; }, [peer]);
   useEffect(() => { callRef.current = call; }, [call]);
+  useEffect(() => { localStorage.setItem("mas.lang", language); }, [language]);
+  useEffect(() => { localStorage.setItem("mas.notifications", String(notificationsEnabled)); }, [notificationsEnabled]);
+  useEffect(() => { localStorage.setItem("mas.readReceipts", String(readReceipts)); }, [readReceipts]);
+  useEffect(() => { localStorage.setItem("mas.typingIndicator", String(typingIndicator)); }, [typingIndicator]);
 
   const scrollToBottom = useCallback(() => {
     setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
@@ -202,11 +616,11 @@ export default function App() {
   const chatItems = useMemo(() => {
     const labelForType = (type: UiMessage["contentType"]) => {
       switch (type) {
-        case "file": return "Файл";
+        case "file": return t("file");
         case "gif": return "GIF";
-        case "sticker": return "Стікер";
-        case "emoji": return "Емодзі";
-        default: return "Зашифроване повідомлення";
+        case "sticker": return t("sticker");
+        case "emoji": return t("emoji");
+        default: return t("encryptedMessage");
       }
     };
     const items = chatList.map((item) => ({
@@ -229,13 +643,13 @@ export default function App() {
         item.phone.toLowerCase().includes(q) ||
         item.lastMessage.toLowerCase().includes(q)
     );
-  }, [chatList, chatQuery, onlineUserIds, unreadMap]);
+  }, [chatList, chatQuery, onlineUserIds, unreadMap, t]);
 
   const countryOptions = useMemo(() => {
     const makeDisplay = (locale: string) => {
       try { return new Intl.DisplayNames([locale], { type: "region" }); } catch { return null; }
     };
-    const displayDefault = makeDisplay(navigator.language);
+    const displayDefault = makeDisplay(language);
     const displayRu = makeDisplay("ru");
     const displayUk = makeDisplay("uk");
     const displayEn = makeDisplay("en");
@@ -250,8 +664,8 @@ export default function App() {
           search: `${names.join(" ")} ${item}`.toLowerCase()
         };
       })
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, []);
+      .sort((a, b) => a.name.localeCompare(b.name, language));
+  }, [language]);
 
   const translitToLatin = (value: string) => {
     const map: Record<string, string> = {
@@ -304,19 +718,50 @@ export default function App() {
     } catch { /* offline */ }
   }, [token, authHeaders]);
 
+  const handleLanguageChange = (next: Lang) => {
+    setLanguage(next);
+    setStatus("");
+  };
+
+  const handleNotificationsChange = async (enabled: boolean) => {
+    if (!enabled) {
+      setNotificationsEnabled(false);
+      return;
+    }
+    if (!("Notification" in window)) {
+      setNotificationsEnabled(false);
+      setStatus(t("notificationUnsupported"));
+      return;
+    }
+    if (Notification.permission === "denied") {
+      setNotificationsEnabled(false);
+      setStatus(t("notificationPermissionDenied"));
+      return;
+    }
+    if (Notification.permission === "default") {
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") {
+        setNotificationsEnabled(false);
+        setStatus(t("notificationPermissionDenied"));
+        return;
+      }
+    }
+    setNotificationsEnabled(true);
+  };
+
   const saveLogin = async () => {
-    if (!loginValue.trim()) { setStatus("Вкажіть логін."); return; }
+    if (!loginValue.trim()) { setStatus(t("loginRequired")); return; }
     try {
       const res = await fetch(`${API_URL}/users/login`, {
         method: "POST", headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify({ login: loginValue })
       });
-      if (res.status === 409) { setStatus("Логін уже зайнятий."); return; }
-      if (!res.ok) { setStatus("Не вдалося зберегти логін."); return; }
+      if (res.status === 409) { setStatus(t("loginTaken")); return; }
+      if (!res.ok) { setStatus(t("loginSaveFailed")); return; }
       const data = await res.json();
       setUser((prev) => (prev ? { ...prev, login: data.login } : prev));
-      setStatus("Логін оновлено.");
-    } catch { setStatus("Помилка мережі."); }
+      setStatus(t("loginUpdated"));
+    } catch { setStatus(t("networkError")); }
   };
 
   const findUserByLogin = useCallback(async () => {
@@ -359,32 +804,64 @@ export default function App() {
       fetch(`${API_URL}/keys`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders },
-        body: JSON.stringify({ publicKey: keys.publicKey, secretKey: keys.secretKey })
+        body: JSON.stringify({ publicKey: keys.publicKey })
       }).catch(() => {});
       return;
     }
     (async () => {
       try {
-        const res = await fetch(`${API_URL}/keys/pair`, { headers: authHeaders });
-        if (res.ok) {
-          const saved = await res.json();
-          if (saved.publicKey && saved.secretKey) {
-            const restored = { publicKey: saved.publicKey, secretKey: saved.secretKey };
-            localStorage.setItem("mas.keys", JSON.stringify(restored));
-            setKeys(restored);
-            return;
-          }
+        const backupRes = await fetch(`${API_URL}/keys/backup`, { headers: authHeaders });
+        if (backupRes.ok) {
+          setBackupAvailable(true);
+          setStatus(t("backupFound"));
+          return;
         }
       } catch { /* ignore */ }
       const pair = generateKeyPair();
       localStorage.setItem("mas.keys", JSON.stringify(pair));
       setKeys(pair);
     })();
-  }, [token, keys, authHeaders]);
+  }, [token, keys, authHeaders, t]);
+
+  const saveKeyBackup = async () => {
+    if (!keys) { setStatus(t("keysNotReady")); return; }
+    if (backupPin.length < 8) { setStatus(t("pinTooShort")); return; }
+    try {
+      const backup = await createKeyBackupPayload(keys, backupPin);
+      const res = await fetch(`${API_URL}/keys/backup`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", ...authHeaders },
+        body: JSON.stringify({ publicKey: keys.publicKey, backup })
+      });
+      if (!res.ok) { setStatus(t("backupSaveFailed")); return; }
+      setBackupAvailable(true);
+      setBackupPin("");
+      setStatus(t("backupSaved"));
+    } catch {
+      setStatus(t("backupEncryptFailed"));
+    }
+  };
+
+  const restoreKeyBackup = async () => {
+    if (restorePin.length < 8) { setStatus(t("backupPinRequired")); return; }
+    try {
+      const res = await fetch(`${API_URL}/keys/backup`, { headers: authHeaders });
+      if (!res.ok) { setStatus(t("backupMissing")); return; }
+      const data = (await res.json()) as KeyBackupResponse;
+      const restored = await restoreKeysFromBackup(data.publicKey, data.backup, restorePin);
+      localStorage.setItem("mas.keys", JSON.stringify(restored));
+      setKeys(restored);
+      setRestorePin("");
+      setBackupAvailable(true);
+      setStatus(t("keyRestored"));
+    } catch {
+      setStatus(t("keyRestoreFailed"));
+    }
+  };
 
   // WebSocket with auto-reconnect
   const connectWebSocket = useCallback(() => {
-    if (!token) return;
+    if (!token || !shouldReconnectRef.current) return;
     if (wsRef.current) {
       const s = wsRef.current.readyState;
       if (s === WebSocket.OPEN || s === WebSocket.CONNECTING) return;
@@ -399,11 +876,21 @@ export default function App() {
     };
 
     ws.onmessage = async (event) => {
-      const { type, payload } = JSON.parse(event.data);
+      let data: { type?: string; payload?: any };
+      try {
+        data = JSON.parse(event.data);
+      } catch {
+        return;
+      }
+      const { type, payload } = data;
+      if (!type || !payload) return;
       if (type === "message.receive") {
-        await handleIncomingMessage(payload);
+        const incoming = await handleIncomingMessage(payload);
         fetchChats();
-        if (notificationsEnabled) notifSound();
+        if (notificationsEnabled) {
+          notifSound();
+          showBrowserNotification(incoming);
+        }
       }
       if (type === "message.delivered") {
         setMessages((prev) =>
@@ -422,6 +909,10 @@ export default function App() {
       }
       if (type === "message.deleted") {
         setMessages((prev) => prev.filter((msg) => msg.id !== payload.id));
+      }
+      if (type === "conversation.deleted") {
+        if (payload.peerId === peerRef.current?.id) setMessages([]);
+        fetchChats();
       }
       if (type === "message.edited") {
         decryptIncoming(payload).then((decrypted) => {
@@ -491,20 +982,27 @@ export default function App() {
     };
 
     ws.onclose = () => {
-      wsRef.current = null;
-      reconnectTimer.current = window.setTimeout(() => connectWebSocket(), 2000);
+      if (wsRef.current === ws) wsRef.current = null;
+      if (shouldReconnectRef.current) {
+        reconnectTimer.current = window.setTimeout(() => connectWebSocket(), 2000);
+      }
     };
 
     ws.onerror = () => {
       ws.close();
     };
-  }, [token, fetchChats, notificationsEnabled]);
+  }, [token, fetchChats, notificationsEnabled, t]);
 
   useEffect(() => {
     if (!token) return;
+    shouldReconnectRef.current = true;
     connectWebSocket();
     return () => {
+      shouldReconnectRef.current = false;
       if (reconnectTimer.current) { clearTimeout(reconnectTimer.current); reconnectTimer.current = null; }
+      const ws = wsRef.current;
+      wsRef.current = null;
+      ws?.close();
     };
   }, [token, connectWebSocket]);
 
@@ -544,20 +1042,23 @@ export default function App() {
   }, [messages, chatSearch]);
 
   const requestCode = async () => {
-    if (!isValidPhoneNumber(fullPhone)) { setStatus("Невірний номер телефону."); return; }
+    if (!isValidPhoneNumber(fullPhone)) { setStatus(t("invalidPhone")); return false; }
     try {
       const res = await fetch(`${API_URL}/auth/request`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone: fullPhone })
       });
+      if (!res.ok) { setStatus(t("networkError")); return false; }
       const data = await res.json();
       setDevCode(data.devCode ?? "");
-      setStatus("Код надіслано (dev).");
-    } catch { setStatus("Помилка мережі."); }
+      setStatus(data.devCode ? t("codeSentDev") : t("codeSent"));
+      setAuthStep("code");
+      return true;
+    } catch { setStatus(t("networkError")); return false; }
   };
 
   const verifyCode = async () => {
-    if (!isValidPhoneNumber(fullPhone)) { setStatus("Невірний номер телефону."); return; }
+    if (!isValidPhoneNumber(fullPhone)) { setStatus(t("invalidPhone")); return; }
     try {
       const res = await fetch(`${API_URL}/auth/verify`, {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -566,25 +1067,106 @@ export default function App() {
       const data = await res.json();
       if (data.token) {
         setToken(data.token); localStorage.setItem("mas.token", data.token);
-        setUser(data.user); setStatus("Авторизація успішна.");
-      } else { setStatus("Код невірний."); }
-    } catch { setStatus("Помилка мережі."); }
+        setUser(data.user); setStatus(t("authSuccess"));
+      } else { setStatus(t("wrongCode")); }
+    } catch { setStatus(t("networkError")); }
   };
+
+  const startQrLogin = useCallback(async () => {
+    try {
+      setStatus(ta("qrWaiting"));
+      setQrSession(null);
+      setQrDataUrl("");
+      const res = await fetch(`${API_URL}/auth/qr/start`, { method: "POST" });
+      if (!res.ok) { setStatus(ta("qrStartFailed")); return; }
+      const data = await res.json() as { qrSessionId?: string; qrPayload?: string; expiresAt?: string };
+      if (!data.qrSessionId || !data.qrPayload || !data.expiresAt) {
+        setStatus(ta("qrStartFailed"));
+        return;
+      }
+      const url = new URL(data.qrPayload);
+      const secret = url.searchParams.get("secret");
+      if (!secret) {
+        setStatus(ta("qrStartFailed"));
+        return;
+      }
+      const dataUrl = await QRCode.toDataURL(data.qrPayload, {
+        width: 224,
+        margin: 1,
+        color: { dark: "#0c0f1a", light: "#ffffff" }
+      });
+      setQrSession({ id: data.qrSessionId, secret, payload: data.qrPayload, expiresAt: data.expiresAt });
+      setQrDataUrl(dataUrl);
+    } catch {
+      setStatus(ta("qrStartFailed"));
+    }
+  }, [ta]);
+
+  useEffect(() => {
+    if (authStep === "qr" && !qrSession && !qrDataUrl) {
+      startQrLogin();
+    }
+  }, [authStep, qrDataUrl, qrSession, startQrLogin]);
+
+  useEffect(() => {
+    if (authStep !== "qr" || !qrSession) return;
+    let stopped = false;
+    const poll = async () => {
+      if (stopped) return;
+      if (Date.now() >= Date.parse(qrSession.expiresAt)) {
+        setStatus(ta("qrExpired"));
+        return;
+      }
+      try {
+        const res = await fetch(
+          `${API_URL}/auth/qr/status/${encodeURIComponent(qrSession.id)}?secret=${encodeURIComponent(qrSession.secret)}`
+        );
+        if (!res.ok) {
+          if (res.status === 404 || res.status === 409) setStatus(ta("qrInvalid"));
+          return;
+        }
+        const data = await res.json() as { status?: string; token?: string; user?: User };
+        if (data.status === "claimed" && data.token && data.user) {
+          stopped = true;
+          setStatus(ta("qrApproved"));
+          setToken(data.token);
+          localStorage.setItem("mas.token", data.token);
+          setUser(data.user);
+          return;
+        }
+        if (data.status === "expired") setStatus(ta("qrExpired"));
+        else if (data.status === "denied" || data.status === "claimed") setStatus(ta("qrInvalid"));
+        else setStatus(ta("qrWaiting"));
+      } catch {
+        setStatus(t("networkError"));
+      }
+    };
+    poll();
+    const timer = window.setInterval(poll, 2000);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }, [authStep, qrSession, t, ta]);
 
   const logout = () => {
     setToken(null); setUser(null); setPeer(null); setMessages([]);
     localStorage.removeItem("mas.token");
-    wsRef.current?.close();
+    shouldReconnectRef.current = false;
+    if (reconnectTimer.current) { clearTimeout(reconnectTimer.current); reconnectTimer.current = null; }
+    const ws = wsRef.current;
+    wsRef.current = null;
+    ws?.close();
   };
 
   const findPeer = async (phone: string) => {
     try {
-      const res = await fetch(`${API_URL}/users/by-phone?phone=${phone}`);
-      if (!res.ok) { setStatus("Користувача не знайдено."); return; }
+      const res = await fetch(`${API_URL}/users/by-phone?phone=${encodeURIComponent(phone)}`, { headers: authHeaders });
+      if (!res.ok) { setStatus(t("userNotFound")); return; }
       const data = (await res.json()) as User;
-      setPeer(data); setStatus("Контакт додано.");
+      setPeer(data); setStatus(t("contactAdded"));
       await loadMessages(data.id);
-    } catch { setStatus("Помилка мережі."); }
+    } catch { setStatus(t("networkError")); }
   };
 
   const loadMessages = async (peerId: string, append = false) => {
@@ -605,7 +1187,7 @@ export default function App() {
 
   const fetchPeerById = async (peerId: string) => {
     try {
-      const res = await fetch(`${API_URL}/users/${peerId}`);
+      const res = await fetch(`${API_URL}/users/${peerId}`, { headers: authHeaders });
       if (!res.ok) return null;
       return (await res.json()) as User;
     } catch { return null; }
@@ -640,7 +1222,7 @@ export default function App() {
       return {
         id: payload.id, from: payload.from, to: payload.to,
         createdAt: payload.createdAt, contentType: payload.contentType,
-        text: "🔒 Немає ключів шифрування", meta: { ...payload.meta, decryptFailed: "true" },
+        text: `🔒 ${t("noKeysEncrypted")}`, meta: { ...payload.meta, decryptFailed: "true" },
         isMine
       };
     }
@@ -668,7 +1250,7 @@ export default function App() {
     }
 
     if (!text && payload.contentType === "text") {
-      text = "🔒 Повідомлення зашифроване іншим ключем";
+      text = `🔒 ${t("wrongKeyEncrypted")}`;
       decryptFailed = true;
     }
 
@@ -690,8 +1272,21 @@ export default function App() {
   };
 
   const sendReadReceipts = (peerId: string, ids: string[]) => {
+    if (!readReceipts) return;
     if (!ids.length || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
     wsRef.current.send(JSON.stringify({ type: "message.read", payload: { peerId, ids } }));
+  };
+
+  const showBrowserNotification = (msg: UiMessage) => {
+    if (document.visibilityState !== "hidden") return;
+    if (!("Notification" in window) || Notification.permission !== "granted") return;
+    const from = peerRef.current?.id === msg.from
+      ? peerRef.current.login ?? peerRef.current.phone
+      : t("notificationTitle");
+    const body = msg.text || (msg.contentType === "file" ? t("file") : t("encryptedMessage"));
+    try {
+      new Notification(from, { body, tag: msg.id });
+    } catch { /* ignore */ }
   };
 
   const handleIncomingMessage = async (payload: any) => {
@@ -705,9 +1300,11 @@ export default function App() {
         [payload.from]: (prev[payload.from] ?? 0) + 1
       }));
     }
+    return decrypted;
   };
 
   const sendTyping = () => {
+    if (!typingIndicator) return;
     if (!peer || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
     if (typingTimerRef.current) return;
     wsRef.current.send(JSON.stringify({ type: "typing", payload: { to: peer.id } }));
@@ -720,16 +1317,16 @@ export default function App() {
     meta?: Record<string, string>,
     replyToId?: string
   ) => {
-    if (!peer) { setStatus("Оберіть чат."); return; }
-    if (!keys) { setStatus("Ключі не ініціалізовані."); return; }
+    if (!peer) { setStatus(t("chooseChat")); return; }
+    if (!keys) { setStatus(t("keysNotReady")); return; }
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      setStatus("Немає з'єднання."); return;
+      setStatus(t("noConnection")); return;
     }
     let targetKey = peer.publicKey;
     if (!targetKey) {
       const refreshed = await fetchPeerById(peer.id);
       if (refreshed?.publicKey) { setPeer(refreshed); targetKey = refreshed.publicKey; }
-      else { setStatus("У контакта немає публічного ключа."); return; }
+      else { setStatus(t("peerNoPublicKey")); return; }
     }
     const id = crypto.randomUUID();
     const createdAt = new Date().toISOString();
@@ -807,14 +1404,14 @@ export default function App() {
       const uid = user?.id ?? "";
       const idx = reactions[emoji].indexOf(uid);
       if (idx >= 0) { reactions[emoji].splice(idx, 1); if (!reactions[emoji].length) delete reactions[emoji]; }
-      else { reactions[emoji] = [uid]; }
+      else { reactions[emoji].push(uid); }
       return { ...m, reactions };
     }));
     setReactionPicker(null);
   };
 
   const copyMessageText = (text: string) => {
-    navigator.clipboard.writeText(text).then(() => setStatus("Скопійовано")).catch(() => {});
+    navigator.clipboard.writeText(text).then(() => setStatus(t("copied"))).catch(() => {});
   };
 
   const startReply = (msg: UiMessage) => { setReplyTo(msg); setEditingMsg(null); setCtxMenu(null); };
@@ -832,53 +1429,61 @@ export default function App() {
 
   const clearChat = async () => {
     if (!peer || !token) return;
-    if (!confirm("Видалити всі повідомлення з цим контактом?")) return;
+    const choice = window.prompt(t("clearPrompt"));
+    if (choice !== "me" && choice !== "both") return;
+    if (choice === "both" && !confirm(t("clearBothConfirm"))) return;
     try {
-      await fetch(`${API_URL}/messages/${peer.id}`, {
+      const res = await fetch(`${API_URL}/messages/${peer.id}?scope=${choice}`, {
         method: "DELETE", headers: authHeaders
       });
+      if (!res.ok) { setStatus(t("clearFailed")); return; }
       setMessages([]);
       fetchChats();
-      setStatus("Чат очищено.");
-    } catch { setStatus("Помилка очищення чату."); }
+      setStatus(t("chatCleared"));
+    } catch { setStatus(t("clearFailed")); }
   };
 
   const handleFile = async (file: File | null) => {
     if (!file || !peer || !keys) return;
-    if (!peer.publicKey) { setStatus("У контакта немає публічного ключа."); return; }
+    if (!peer.publicKey) { setStatus(t("peerNoPublicKey")); return; }
     try {
       const bytes = new Uint8Array(await file.arrayBuffer());
       const encrypted = encryptBytes(bytes, keys.secretKey, peer.publicKey);
       const blob = new Blob([fromBase64(encrypted.ciphertext) as any], { type: "application/octet-stream" });
-      const localUrl = URL.createObjectURL(file);
       const form = new FormData();
       form.append("file", blob, `${file.name}.enc`);
+      form.append("peerId", peer.id);
       const res = await fetch(`${API_URL}/files`, {
         method: "POST", headers: authHeaders, body: form
       });
+      if (!res.ok) { setStatus(t("uploadFailed")); return; }
       const data = await res.json();
       await sendMessage("file", "", {
         fileName: file.name, fileType: file.type,
-        fileUrl: `${API_URL}${data.url}`,
-        nonce: encrypted.nonce, localUrl
+        fileId: data.fileId,
+        nonce: encrypted.nonce
       });
-    } catch { setStatus("Помилка завантаження файлу."); }
+    } catch { setStatus(t("uploadFailed")); }
   };
 
   const decryptFile = async (msg: UiMessage) => {
     if (!msg.meta || !keys || !peer) return;
-    if (msg.isMine && msg.meta.localUrl) { window.open(msg.meta.localUrl, "_blank"); return; }
     try {
-      const response = await fetch(msg.meta.fileUrl);
+      const fileUrl = msg.meta.fileId ? `${API_URL}/files/${msg.meta.fileId}` : msg.meta.fileUrl;
+      if (!fileUrl) { setStatus(t("fileUnavailable")); return; }
+      const response = await fetch(fileUrl, { headers: authHeaders });
+      if (!response.ok) { setStatus(t("fileUnavailable")); return; }
       const buffer = new Uint8Array(await response.arrayBuffer());
       const decrypted = decryptBytes(
         msg.meta.nonce, toBase64(buffer),
         msg.meta.senderPublicKey ?? peer.publicKey ?? "", keys.secretKey
       );
-      if (!decrypted) { setStatus("Не вдалося розшифрувати файл."); return; }
+      if (!decrypted) { setStatus(t("fileDecryptFailed")); return; }
       const blobOut = new Blob([decrypted as any], { type: msg.meta.fileType || "application/octet-stream" });
-      window.open(URL.createObjectURL(blobOut), "_blank");
-    } catch { setStatus("Помилка завантаження файлу."); }
+      const url = URL.createObjectURL(blobOut);
+      window.open(url, "_blank", "noopener,noreferrer");
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch { setStatus(t("uploadFailed")); }
   };
 
   
@@ -887,12 +1492,20 @@ export default function App() {
   const renderCallWindow = () => {
     const win = window.open("", "mas-call", "width=480,height=720");
     if (!win) return null;
-    win.document.title = "MAS — Дзвінок";
-    const peerDisplay = peer?.login ?? peer?.phone ?? "Абонент";
+    win.document.title = t("callWindowTitle");
+    const peerDisplay = peer?.login ?? peer?.phone ?? t("subscriber");
     const peerInitial = peerDisplay.slice(0, 1).toUpperCase();
+    const callLabel = t("call");
+    const connectingLabel = t("connecting");
+    const micLabel = t("microphone");
+    const cameraLabel = t("camera");
+    const endLabel = t("end");
+    const screenShareLabel = t("screenShare");
+    const fullscreenLabel = t("fullscreen");
+    const screenLabel = t("screen");
+    const screenSharingLabel = t("screenSharing");
     win.document.head.innerHTML = `
-      <meta charset="UTF-8">
-      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">`;
+      <meta charset="UTF-8">`;
     win.document.body.innerHTML = `
       <style>
         *{box-sizing:border-box;margin:0;padding:0}
@@ -949,13 +1562,13 @@ export default function App() {
       <div class="wrap" id="callWrap">
         <div class="bg"></div>
         <div class="top">
-          <div class="type" id="callLabel">Дзвінок</div>
+          <div class="type" id="callLabel">${callLabel}</div>
           <div class="peer-name" id="peerName"></div>
-          <div class="call-status" id="statusLabel"><span class="dot"></span><span id="statusText">З'єднання…</span></div>
+          <div class="call-status" id="statusLabel"><span class="dot"></span><span id="statusText">${connectingLabel}</span></div>
           <div class="timer" id="timerLabel">00:00</div>
           <div class="screen-indicator" id="screenIndicator" style="display:none">
             <svg viewBox="0 0 24 24" width="14" height="14"><rect x="2" y="3" width="20" height="14" rx="2" ry="2" fill="none" stroke="currentColor" stroke-width="2"/><line x1="8" y1="21" x2="16" y2="21" stroke="currentColor" stroke-width="2"/><line x1="12" y1="17" x2="12" y2="21" stroke="currentColor" stroke-width="2"/></svg>
-            <span>Трансляція екрану</span>
+            <span>${screenSharingLabel}</span>
           </div>
         </div>
         <div class="center" id="centerArea">
@@ -969,25 +1582,25 @@ export default function App() {
         <video id="remoteVideo" autoplay playsinline></video>
         <video id="localVideo" autoplay playsinline muted></video>
         <div class="bar">
-          <button class="btn btn-default" id="micBtn" title="Мікрофон">
+          <button class="btn btn-default" id="micBtn" title="${micLabel}">
             <svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-            <span class="btn-label">Мікрофон</span>
+            <span class="btn-label">${micLabel}</span>
           </button>
-          <button class="btn btn-default" id="camBtn" title="Камера">
+          <button class="btn btn-default" id="camBtn" title="${cameraLabel}">
             <svg viewBox="0 0 24 24"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
-            <span class="btn-label">Камера</span>
+            <span class="btn-label">${cameraLabel}</span>
           </button>
-          <button class="btn btn-end" id="endCallBtn" title="Завершити">
+          <button class="btn btn-end" id="endCallBtn" title="${endLabel}">
             <svg viewBox="0 0 24 24"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.15-1.15a1 1 0 0 1 .9-.27 11.4 11.4 0 0 0 3.87.65 1 1 0 0 1 .99 1v3.5a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.22 2.6.65 3.87a1 1 0 0 1-.27.9z" stroke="#fff" fill="none"/><line x1="1" y1="1" x2="23" y2="23" stroke="#fff"/></svg>
-            <span class="btn-label">Завершити</span>
+            <span class="btn-label">${endLabel}</span>
           </button>
-          <button class="btn btn-default" id="screenBtn" title="Демонстрація екрану">
+          <button class="btn btn-default" id="screenBtn" title="${screenShareLabel}">
             <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-            <span class="btn-label">Екран</span>
+            <span class="btn-label">${screenLabel}</span>
           </button>
-          <button class="btn btn-default" id="fullscreenBtn" title="На весь екран">
+          <button class="btn btn-default" id="fullscreenBtn" title="${fullscreenLabel}">
             <svg viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
-            <span class="btn-label">Екран</span>
+            <span class="btn-label">${screenLabel}</span>
           </button>
         </div>
       </div>`;
@@ -1116,7 +1729,7 @@ export default function App() {
       }
       switchCallWindowToVideo();
     } catch {
-      setStatus("Не вдалося увімкнути камеру.");
+      setStatus(t("cameraEnableFailed"));
     }
   };
 
@@ -1124,7 +1737,7 @@ export default function App() {
     const win = callWindowRef.current;
     if (!win) return;
     const parts = callWindowPartsRef.current;
-    if (parts?.label) parts.label.textContent = "ВІДЕОДЗВІНОК";
+    if (parts?.label) parts.label.textContent = t("videoCallUpper");
     if (parts?.remoteVideo) parts.remoteVideo.style.display = "block";
     if (parts?.localVideo) parts.localVideo.style.display = "block";
     const wrap = win.document.getElementById("callWrap");
@@ -1259,9 +1872,9 @@ export default function App() {
     if (!parts) return;
     const win = callWindowRef.current;
 
-    if (parts.label) parts.label.textContent = isVideo ? "ВІДЕОДЗВІНОК" : "АУДІОДЗВІНОК";
+    if (parts.label) parts.label.textContent = isVideo ? t("videoCallUpper") : t("audioCallUpper");
 
-    const peerDisplay = peer?.login ?? peer?.phone ?? "Абонент";
+    const peerDisplay = peer?.login ?? peer?.phone ?? t("subscriber");
     if (parts.peerName) parts.peerName.textContent = peerDisplay;
 
     if (parts.remoteVideo) parts.remoteVideo.style.display = isVideo ? "block" : "none";
@@ -1280,10 +1893,10 @@ export default function App() {
     }
 
     if (call.status === "in-call") {
-      if (parts.statusLabel) parts.statusLabel.textContent = "Активний дзвінок";
+      if (parts.statusLabel) parts.statusLabel.textContent = t("activeCallStatus");
       if (!parts.timerStartTime) parts.timerStartTime = Date.now();
     }
-    if (call.status === "calling" && parts.statusLabel) parts.statusLabel.textContent = "Виклик…";
+    if (call.status === "calling" && parts.statusLabel) parts.statusLabel.textContent = t("calling");
   };
 
   const syncCallWindowStreams = (localStream?: MediaStream, remoteStream?: MediaStream) => {
@@ -1329,7 +1942,7 @@ export default function App() {
   const startCall = async (isVideo = false) => {
     if (!peer) return;
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      setStatus("Немає з'єднання."); return;
+      setStatus(t("noConnection")); return;
     }
     try {
       const pc = createPeerConnection();
@@ -1356,7 +1969,7 @@ export default function App() {
       }));
       setCall({ status: "calling", pc, localStream, isVideo });
     } catch (err) {
-      setStatus("Не вдалося запустити дзвінок. Перевірте доступ до мікрофона.");
+      setStatus(t("callStartFailed"));
     }
   };
 
@@ -1368,9 +1981,9 @@ export default function App() {
       const fetched = await fetchPeerById(call.callerId);
       if (fetched) { setPeer(fetched); currentPeer = fetched; }
     }
-    if (!currentPeer) { setStatus("Немає даних співрозмовника."); return; }
+    if (!currentPeer) { setStatus(t("peerMissing")); return; }
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      setStatus("Немає з'єднання."); return;
+      setStatus(t("noConnection")); return;
     }
     try {
       const pc = createPeerConnection();
@@ -1398,7 +2011,7 @@ export default function App() {
       }));
       setCall({ status: "in-call", pc, localStream, isVideo: call.isVideo });
     } catch (err) {
-      setStatus("Не вдалося прийняти дзвінок. Перевірте доступ до мікрофона.");
+      setStatus(t("callAcceptFailed"));
       endCall();
     }
   };
@@ -1435,42 +2048,119 @@ export default function App() {
   // -- Render --
   if (!isAuthed) {
     return (
-      <div className="auth">
-        <h1>MAS Secure</h1>
-        <p>Вхід за номером телефону (SMS).</p>
-        <div className="phone-row">
-          <div className="select-wrapper" ref={selectRef}>
-            <button type="button" className="select-trigger" onClick={() => setCountryOpen((p) => !p)}>
-              <span>{activeCountry?.name ?? country} (+{activeCountry?.dial ?? dialCode})</span>
-              <span className="chevron" />
-            </button>
-            {countryOpen && (
-              <div className="select-panel">
-                <input className="select-search" placeholder="Пошук країни або коду"
-                  value={countryQuery} onChange={(e) => setCountryQuery(e.target.value)} />
-                <div className="select-list">
-                  {filteredCountries.map((item) => (
-                    <button type="button" key={item.code}
-                      className={`select-item ${item.code === country ? "active" : ""}`}
-                      onClick={() => { setCountry(item.code); setCountryOpen(false); }}>
-                      <span>{item.name}</span>
-                      <span className="dial">+{item.dial}</span>
-                    </button>
-                  ))}
-                  {filteredCountries.length === 0 && <div className="select-empty">Нічого не знайдено</div>}
-                </div>
-              </div>
+      <div className="auth-shell">
+        <div className="auth">
+          <div className="auth-step-head">
+            {authStep !== "language" && (
+              <button type="button" className="auth-back" onClick={() => {
+                setStatus("");
+                if (authStep === "method") setAuthStep("language");
+                else if (authStep === "code") setAuthStep("phone");
+                else setAuthStep("method");
+                if (authStep === "qr") { setQrSession(null); setQrDataUrl(""); }
+              }}>
+                {ta("back")}
+              </button>
             )}
+            <h1>{t("appName")}</h1>
+            <p>
+              {authStep === "language" && ta("chooseLanguage")}
+              {authStep === "method" && ta("chooseSignIn")}
+              {authStep === "phone" && t("authSubtitle")}
+              {authStep === "code" && ta("codeTitle")}
+              {authStep === "qr" && ta("qrTitle")}
+            </p>
           </div>
-          <input placeholder="Номер" value={localNumber} onChange={(e) => setLocalNumber(e.target.value)} />
+
+          {authStep === "language" && (
+            <>
+              <select className="language-select auth-language" value={language}
+                onChange={(e) => handleLanguageChange(e.target.value as Lang)}
+                aria-label={t("language")}>
+                {languageOptions.map((item) => (
+                  <option key={item} value={item}>{languageLabels[item]}</option>
+                ))}
+              </select>
+              <button onClick={() => setAuthStep("method")}>{ta("next")}</button>
+            </>
+          )}
+
+          {authStep === "method" && (
+            <div className="auth-methods">
+              <button type="button" className="auth-method" onClick={() => { setStatus(""); setAuthStep("phone"); }}>
+                <span>{ta("phoneMethod")}</span>
+                <small>{ta("phoneMethodHint")}</small>
+              </button>
+              <button type="button" className="auth-method" onClick={() => { setStatus(""); setAuthStep("qr"); }}>
+                <span>{ta("qrMethod")}</span>
+                <small>{ta("qrMethodHint")}</small>
+              </button>
+            </div>
+          )}
+
+          {authStep === "phone" && (
+            <>
+              <div className="phone-row">
+                <div className="select-wrapper" ref={selectRef}>
+                  <button type="button" className="select-trigger" onClick={() => setCountryOpen((p) => !p)}>
+                    <span>{activeCountry?.name ?? country} (+{activeCountry?.dial ?? dialCode})</span>
+                    <span className="chevron" />
+                  </button>
+                  {countryOpen && (
+                    <div className="select-panel">
+                      <input className="select-search" placeholder={t("countrySearch")}
+                        value={countryQuery} onChange={(e) => setCountryQuery(e.target.value)} />
+                      <div className="select-list">
+                        {filteredCountries.map((item) => (
+                          <button type="button" key={item.code}
+                            className={`select-item ${item.code === country ? "active" : ""}`}
+                            onClick={() => { setCountry(item.code); setCountryOpen(false); }}>
+                            <span>{item.name}</span>
+                            <span className="dial">+{item.dial}</span>
+                          </button>
+                        ))}
+                        {filteredCountries.length === 0 && <div className="select-empty">{t("nothingFound")}</div>}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <input placeholder={t("phoneNumber")} value={localNumber} onChange={(e) => setLocalNumber(e.target.value)} />
+              </div>
+              <div className="auth-meta">
+                <span className="hint">{t("fullNumber")}: {fullPhone}</span>
+              </div>
+              <button onClick={requestCode}>{ta("confirmPhone")}</button>
+            </>
+          )}
+
+          {authStep === "code" && (
+            <>
+              <p className="auth-copy">{ta("codeHint")}</p>
+              <div className="auth-meta">
+                <span className="hint">{t("fullNumber")}: {fullPhone}</span>
+                <span className={`hint auth-dev ${devCode ? "" : "empty"}`}>{devCode ? `${t("devCode")}: ${devCode}` : " "}</span>
+              </div>
+              <input placeholder={t("code")} value={code} onChange={(e) => setCode(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") verifyCode(); }} autoFocus />
+              <button onClick={verifyCode}>{t("signIn")}</button>
+              <button type="button" className="auth-secondary" onClick={() => { setCode(""); setStatus(""); setAuthStep("phone"); }}>
+                {ta("changePhone")}
+              </button>
+            </>
+          )}
+
+          {authStep === "qr" && (
+            <>
+              <p className="auth-copy">{ta("qrHint")}</p>
+              <div className="auth-qr-frame">
+                {qrDataUrl ? <img className="auth-qr-image" src={qrDataUrl} alt={ta("qrTitle")} /> : <div className="auth-qr-loading" />}
+              </div>
+              <button type="button" className="auth-secondary" onClick={startQrLogin}>{ta("qrRetry")}</button>
+            </>
+          )}
+
+          <div className={`status auth-status ${status ? "" : "empty"}`}>{status || " "}</div>
         </div>
-        <span className="hint">Повний номер: {fullPhone}</span>
-        <button onClick={requestCode}>Отримати код</button>
-        {devCode && <span className="hint">Dev-код: {devCode}</span>}
-        <input placeholder="Код" value={code} onChange={(e) => setCode(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") verifyCode(); }} />
-        <button onClick={verifyCode}>Увійти</button>
-        {status && <div className="status">{status}</div>}
       </div>
     );
   }
@@ -1484,14 +2174,14 @@ export default function App() {
               <div className="profile-left"><div className="logo">MAS</div></div>
             </div>
             <div className="sidebar-search">
-              <input placeholder="Пошук чатів" value={chatQuery}
+              <input placeholder={t("chatsSearch")} value={chatQuery}
                 onChange={(e) => setChatQuery(e.target.value)} />
             </div>
             {chatQuery.trim().length >= 3 && (
               <div className="chat-people">
-                <div className="chat-people-title">Люди</div>
+                <div className="chat-people-title">{t("people")}</div>
                 {loginMatches.length === 0 ? (
-                  <div className="chat-empty">Нічого не знайдено</div>
+                  <div className="chat-empty">{t("nothingFound")}</div>
                 ) : (
                   loginMatches.map((item) => (
                     <button key={item.id} className="chat-item" onClick={() => handleSelectUser(item)}>
@@ -1513,7 +2203,7 @@ export default function App() {
             )}
             <div className="chat-list">
               {chatItems.length === 0 ? (
-                <div className="chat-empty">Чатів не знайдено</div>
+                <div className="chat-empty">{t("noChats")}</div>
               ) : (
                 chatItems.map((chat) => (
                   <button key={chat.id}
@@ -1540,17 +2230,17 @@ export default function App() {
         <div className="status">{status}</div>
         {call.status === "incoming" && activeTab === "chat" && (
           <div className="call-card">
-            <p>{call.isVideo ? "Вхідний відеодзвінок" : "Вхідний дзвінок"}</p>
+            <p>{call.isVideo ? t("incomingVideoCall") : t("incomingCall")}</p>
             <div className="call-card-btns">
-              <button className="call-accept" onClick={acceptCall}>Прийняти</button>
-              <button className="call-reject" onClick={endCall}>Відхилити</button>
+              <button className="call-accept" onClick={acceptCall}>{t("accept")}</button>
+              <button className="call-reject" onClick={endCall}>{t("decline")}</button>
             </div>
           </div>
         )}
         {call.status === "in-call" && activeTab === "chat" && (
           <div className="call-card">
-            <p>Дзвінок активний</p>
-            <button className="call-reject" onClick={endCall}>Завершити</button>
+            <p>{t("activeCall")}</p>
+            <button className="call-reject" onClick={endCall}>{t("end")}</button>
           </div>
         )}
         <audio ref={remoteAudioRef} autoPlay />
@@ -1564,7 +2254,7 @@ export default function App() {
             </button>
             <button className="gear"
               onClick={() => setActiveTab((p) => (p === "settings" ? "chat" : "settings"))}
-              aria-label="Налаштування">
+              aria-label={t("settings")}>
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M19.14 12.94a7.84 7.84 0 0 0 .05-.94 7.84 7.84 0 0 0-.05-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.2 7.2 0 0 0-1.63-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.58.22-1.12.52-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.7 8.84a.5.5 0 0 0 .12.64l2.03 1.58c-.03.31-.05.63-.05.94s.02.63.05.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32a.5.5 0 0 0 .6.22l2.39-.96c.51.41 1.05.72 1.63.94l.36 2.54a.5.5 0 0 0 .5.42h3.84a.5.5 0 0 0 .5-.42l.36-2.54c.58-.22 1.12-.52 1.63-.94l2.39.96a.5.5 0 0 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64zM12 15.5A3.5 3.5 0 1 1 15.5 12 3.5 3.5 0 0 1 12 15.5z"/>
               </svg>
@@ -1575,28 +2265,28 @@ export default function App() {
               peer ? (
                 <span>
                   {peer.login ?? peer.phone}
-                  {peerTyping && <span className="typing-label"> друкує…</span>}
-                  {!peerTyping && onlineUserIds.has(peer.id) && <span className="online-label"> онлайн</span>}
+                  {peerTyping && <span className="typing-label"> {t("typing")}</span>}
+                  {!peerTyping && onlineUserIds.has(peer.id) && <span className="online-label"> {t("online")}</span>}
                 </span>
               ) : ""
-            ) : "Налаштування"}
+            ) : t("settings")}
           </div>
           {activeTab === "chat" && peer && (
             <div className="call-actions">
-              <button className="gear" onClick={() => { setChatSearchOpen((p) => !p); setChatSearch(""); }} aria-label="Пошук" title="Пошук в чаті">
+              <button className="gear" onClick={() => { setChatSearchOpen((p) => !p); setChatSearch(""); }} aria-label={t("search")} title={t("searchChat")}>
                 <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8" fill="none" stroke="currentColor" strokeWidth="2"/><path d="M21 21l-4.35-4.35" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
               </button>
-              <button className="gear" onClick={clearChat} aria-label="Очистити чат" title="Очистити чат">
+              <button className="gear" onClick={clearChat} aria-label={t("clearChat")} title={t("clearChat")}>
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
               </button>
-              <button className="video-btn" onClick={() => startCall(true)} aria-label="Відеодзвінок">
+              <button className="video-btn" onClick={() => startCall(true)} aria-label={t("videoCall")}>
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M15 8a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h10zm7.5 2.5-3.5 2v-3l3.5 2z"/>
                 </svg>
               </button>
-              <button className="phone-btn" onClick={() => startCall(false)} aria-label="Дзвінок">
+              <button className="phone-btn" onClick={() => startCall(false)} aria-label={t("audioCall")}>
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M6.62 10.79a15.05 15.05 0 0 0 6.59 6.59l2.2-2.2a1 1 0 0 1 1.02-.24 11.36 11.36 0 0 0 3.56.57 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 6a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1 11.36 11.36 0 0 0 .57 3.56 1 1 0 0 1-.24 1.02z"/>
                 </svg>
@@ -1610,9 +2300,9 @@ export default function App() {
             <>
               {chatSearchOpen && (
                 <div className="chat-search-bar">
-                  <input placeholder="Пошук у чаті…" value={chatSearch} autoFocus
+                  <input placeholder={t("searchChat")} value={chatSearch} autoFocus
                     onChange={(e) => setChatSearch(e.target.value)} />
-                  <span className="chat-search-count">{chatSearch ? `${filteredMessages.length} знайдено` : ""}</span>
+                  <span className="chat-search-count">{chatSearch ? `${filteredMessages.length} ${t("found")}` : ""}</span>
                   <button className="ghost" onClick={() => { setChatSearchOpen(false); setChatSearch(""); }}>✕</button>
                 </div>
               )}
@@ -1621,17 +2311,17 @@ export default function App() {
                   const pinned = messages.find((m) => m.pinned);
                   if (pinned) { const el = document.getElementById(`msg-${pinned.id}`); el?.scrollIntoView({ behavior: "smooth" }); }
                 }}>
-                  📌 {messages.filter((m) => m.pinned).length} закріплене повідомлення
+                  📌 {messages.filter((m) => m.pinned).length} {t("pinnedMessage")}
                 </div>
               )}
               <div className="messages">
                 {(chatSearch ? filteredMessages : messages).map((msg, idx, arr) => {
                   const prev = arr[idx - 1];
-                  const showDate = !prev || formatDate(prev.createdAt) !== formatDate(msg.createdAt);
+                  const showDate = !prev || formatDate(prev.createdAt, language) !== formatDate(msg.createdAt, language);
                   const replyMsg = msg.replyToId ? messages.find((m) => m.id === msg.replyToId) : null;
                   return (
                     <React.Fragment key={msg.id}>
-                      {showDate && <div className="date-separator"><span>{formatDate(msg.createdAt)}</span></div>}
+                      {showDate && <div className="date-separator"><span>{formatDate(msg.createdAt, language)}</span></div>}
                       <div id={`msg-${msg.id}`}
                         className={`message ${msg.isMine ? "out" : "in"} ${msg.meta?.decryptFailed ? "decrypt-failed" : ""} ${msg.pinned ? "pinned-msg" : ""}`}
                         onContextMenu={(e) => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY, msg }); }}>
@@ -1641,14 +2331,14 @@ export default function App() {
                             const el = document.getElementById(`msg-${replyMsg.id}`);
                             el?.scrollIntoView({ behavior: "smooth" });
                           }}>
-                            <span className="reply-author">{replyMsg.isMine ? "Ви" : (peer?.login ?? peer?.phone)}</span>
+                            <span className="reply-author">{replyMsg.isMine ? t("you") : (peer?.login ?? peer?.phone)}</span>
                             <span className="reply-text">{replyMsg.text?.slice(0, 60) ?? "..."}</span>
                           </div>
                         )}
                         {msg.meta?.decryptFailed ? (
                           <div className="decrypt-failed-content">
                             <span className="message-text">{msg.text}</span>
-                            <button className="decrypt-delete-btn" onClick={() => deleteMessage(msg.id)}>Видалити</button>
+                            <button className="decrypt-delete-btn" onClick={() => deleteMessage(msg.id)}>{t("delete")}</button>
                           </div>
                         ) : msg.contentType === "file" && msg.meta ? (
                           <button className="file-btn" onClick={() => decryptFile(msg)}>📎 {msg.meta.fileName}</button>
@@ -1674,7 +2364,7 @@ export default function App() {
                           </div>
                         )}
                         <div className="message-meta">
-                          {msg.editedAt && <span className="edited-label">ред.</span>}
+                          {msg.editedAt && <span className="edited-label">{t("edited")}</span>}
                           <span className="message-time">{formatTime(msg.createdAt)}</span>
                           {msg.isMine && !msg.meta?.decryptFailed && (
                             <span className={`message-status ${msg.status ?? "sent"}`}>
@@ -1696,18 +2386,18 @@ export default function App() {
                     ))}
                   </div>
                   <div className="ctx-divider" />
-                  <button className="ctx-item" onClick={() => { startReply(ctxMenu.msg); }}><span className="ctx-icon">↩</span>Відповісти</button>
-                  {ctxMenu.msg.isMine && <button className="ctx-item" onClick={() => { startEdit(ctxMenu.msg); }}><span className="ctx-icon">✏️</span>Редагувати</button>}
-                  <button className="ctx-item" onClick={() => { copyMessageText(ctxMenu.msg.text ?? ""); setCtxMenu(null); }}><span className="ctx-icon">📋</span>Копіювати</button>
-                  <button className="ctx-item" onClick={() => { pinMessage(ctxMenu.msg.id); setCtxMenu(null); }}><span className="ctx-icon">📌</span>{ctxMenu.msg.pinned ? "Відкріпити" : "Закріпити"}</button>
-                  {ctxMenu.msg.isMine && (<><div className="ctx-divider" /><button className="ctx-item ctx-danger" onClick={() => { deleteMessage(ctxMenu.msg.id); setCtxMenu(null); }}><span className="ctx-icon">🗑</span>Видалити</button></>)}
+                  <button className="ctx-item" onClick={() => { startReply(ctxMenu.msg); }}><span className="ctx-icon">↩</span>{t("reply")}</button>
+                  {ctxMenu.msg.isMine && <button className="ctx-item" onClick={() => { startEdit(ctxMenu.msg); }}><span className="ctx-icon">✏️</span>{t("edit")}</button>}
+                  <button className="ctx-item" onClick={() => { copyMessageText(ctxMenu.msg.text ?? ""); setCtxMenu(null); }}><span className="ctx-icon">📋</span>{t("copy")}</button>
+                  <button className="ctx-item" onClick={() => { pinMessage(ctxMenu.msg.id); setCtxMenu(null); }}><span className="ctx-icon">📌</span>{ctxMenu.msg.pinned ? t("unpin") : t("pin")}</button>
+                  {ctxMenu.msg.isMine && (<><div className="ctx-divider" /><button className="ctx-item ctx-danger" onClick={() => { deleteMessage(ctxMenu.msg.id); setCtxMenu(null); }}><span className="ctx-icon">🗑</span>{t("delete")}</button></>)}
                 </div>
               )}
               <div className="composer">
                 {showEmoji && (
                   <div className="emoji-picker">
                     <div className="emoji-header">
-                      <input className="emoji-search" placeholder="Пошук емодзі…" value={emojiSearch}
+                      <input className="emoji-search" placeholder={t("emojiSearch")} value={emojiSearch}
                         onChange={(e) => setEmojiSearch(e.target.value)} autoFocus />
                     </div>
                     <div className="emoji-tabs">
@@ -1731,7 +2421,7 @@ export default function App() {
                 {(replyTo || editingMsg) && (
                   <div className="composer-reply-bar">
                     <div className="composer-reply-info">
-                      <span className="composer-reply-label">{editingMsg ? "✏ Редагування" : `↩ ${replyTo?.isMine ? "Ви" : (peer?.login ?? peer?.phone)}`}</span>
+                      <span className="composer-reply-label">{editingMsg ? `✏ ${t("editing")}` : `↩ ${replyTo?.isMine ? t("you") : (peer?.login ?? peer?.phone)}`}</span>
                       <span className="composer-reply-text">{(editingMsg ?? replyTo)?.text?.slice(0, 80)}</span>
                     </div>
                     <button className="composer-reply-close" onClick={cancelReplyEdit}>✕</button>
@@ -1739,13 +2429,13 @@ export default function App() {
                 )}
                 <div className="composer-row">
                   <button className="emoji-toggle" onClick={() => setShowEmoji((p) => !p)}>😀</button>
-                  <textarea placeholder="Повідомлення" value={msgInput} rows={1}
+                  <textarea placeholder={t("message")} value={msgInput} rows={1}
                     onChange={(e) => { setMsgInput(e.target.value); sendTyping(); if (showEmoji) setShowEmoji(false); }}
                     onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendText(); } }} />
                   <button className="send-btn" onClick={handleSendText} disabled={!msgInput.trim()}>
                     <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
                   </button>
-                  <label className="attach-btn" aria-label="Завантажити файл">
+                  <label className="attach-btn" aria-label={t("attachFile")}>
                     <input type="file" onChange={(e) => handleFile(e.target.files?.[0] ?? null)} />
                     <svg viewBox="0 0 24 24" aria-hidden="true">
                       <path d="M16.5 6.5 8.5 14.5a2.5 2.5 0 0 0 3.54 3.54l8.25-8.25a4 4 0 0 0-5.66-5.66l-8.6 8.6a5.5 5.5 0 0 0 7.78 7.78l8.07-8.07"/>
@@ -1758,92 +2448,84 @@ export default function App() {
             <div className="chat-placeholder">
               <div>
                 <h2>MAS Secure Messenger</h2>
-                <p>Оберіть чат або знайдіть контакт через пошук</p>
+                <p>{t("chatPlaceholder")}</p>
               </div>
             </div>
           )
         ) : (
           <div className="settings">
-            <h2>Налаштування</h2>
+            <h2>{t("settings")}</h2>
             <div className="settings-grid">
               <section className="settings-section">
-                <h3>Програма</h3>
+                <h3>{t("program")}</h3>
                 <label className="settings-row">
-                  <span>Сповіщення</span>
+                  <span>{t("notifications")}</span>
                   <input className="toggle" type="checkbox" checked={notificationsEnabled}
-                    onChange={(e) => setNotificationsEnabled(e.target.checked)} />
+                    onChange={(e) => handleNotificationsChange(e.target.checked)} />
                 </label>
                 <label className="settings-row">
-                  <span>Запускати при старті системи</span>
-                  <input className="toggle" type="checkbox" checked={startOnBoot}
-                    onChange={(e) => setStartOnBoot(e.target.checked)} />
+                  <span>{t("language")}</span>
+                  <select className="language-select" value={language} onChange={(e) => handleLanguageChange(e.target.value as Lang)}>
+                    {languageOptions.map((option) => (
+                      <option key={option} value={option}>{languageLabels[option]}</option>
+                    ))}
+                  </select>
                 </label>
               </section>
               <section className="settings-section">
-                <h3>Акаунт</h3>
+                <h3>{t("account")}</h3>
                 <label className="settings-row column">
-                  <span>Ім'я користувача</span>
-                  <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
-                </label>
-                <label className="settings-row column">
-                  <span>Логін</span>
-                  <input value={loginValue} onChange={(e) => setLoginValue(e.target.value)} placeholder="наприклад: mas_user" />
+                  <span>{t("login")}</span>
+                  <input value={loginValue} onChange={(e) => setLoginValue(e.target.value)} placeholder={t("loginPlaceholder")} />
                 </label>
                 <div className="settings-row">
-                  <span>Унікальний логін</span>
-                  <button className="ghost" onClick={saveLogin}>Зберегти</button>
+                  <span>{t("uniqueLogin")}</span>
+                  <button className="ghost" onClick={saveLogin}>{t("save")}</button>
                 </div>
                 <div className="settings-row">
-                  <span>Номер телефону</span>
+                  <span>{t("phone")}</span>
                   <span className="muted">{user?.phone}</span>
                 </div>
                 <div className="settings-row">
-                  <span>Сеанс</span>
-                  <button className="ghost" onClick={logout}>Вийти</button>
+                  <span>{t("session")}</span>
+                  <button className="ghost" onClick={logout}>{t("logout")}</button>
                 </div>
               </section>
               <section className="settings-section">
-                <h3>Конфіденційність</h3>
+                <h3>{t("keys")}</h3>
+                <div className="settings-row">
+                  <span>{t("backup")}</span>
+                  <span className="muted">{backupAvailable ? t("available") : t("notCreated")}</span>
+                </div>
+                <label className="settings-row column">
+                  <span>{t("masPin")}</span>
+                  <input type="password" value={backupPin} onChange={(e) => setBackupPin(e.target.value)} />
+                </label>
+                <div className="settings-row">
+                  <span>{t("saveKey")}</span>
+                  <button className="ghost" onClick={saveKeyBackup}>{t("save")}</button>
+                </div>
+                <label className="settings-row column">
+                  <span>{t("restorePin")}</span>
+                  <input type="password" value={restorePin} onChange={(e) => setRestorePin(e.target.value)} />
+                </label>
+                <div className="settings-row">
+                  <span>{t("restoreKey")}</span>
+                  <button className="ghost" onClick={restoreKeyBackup}>{t("restoreKey")}</button>
+                </div>
+              </section>
+              <section className="settings-section">
+                <h3>{t("privacy")}</h3>
                 <label className="settings-row">
-                  <span>Звіти про прочитання</span>
+                  <span>{t("readReceipts")}</span>
                   <input className="toggle" type="checkbox" checked={readReceipts}
                     onChange={(e) => setReadReceipts(e.target.checked)} />
                 </label>
                 <label className="settings-row">
-                  <span>Індикатор набору</span>
+                  <span>{t("typingIndicator")}</span>
                   <input className="toggle" type="checkbox" checked={typingIndicator}
                     onChange={(e) => setTypingIndicator(e.target.checked)} />
                 </label>
-                <label className="settings-row">
-                  <span>Останній онлайн</span>
-                  <input className="toggle" type="checkbox" checked={lastSeenVisible}
-                    onChange={(e) => setLastSeenVisible(e.target.checked)} />
-                </label>
-              </section>
-              <section className="settings-section">
-                <h3>Пристрої</h3>
-                <div className="device-list">
-                  {devices.map((device) => (
-                    <div key={device.name} className="device-card">
-                      <div>
-                        <div className="device-name">{device.name}</div>
-                        <div className="muted">{device.location}</div>
-                      </div>
-                      <span className="status-pill">{device.lastActive}</span>
-                    </div>
-                  ))}
-                </div>
-              </section>
-              <section className="settings-section">
-                <h3>Історія дій</h3>
-                <div className="activity-list">
-                  {activityLog.map((item) => (
-                    <div className="activity-row" key={item.title}>
-                      <span>{item.title}</span>
-                      <span className="muted">{item.time}</span>
-                    </div>
-                  ))}
-                </div>
               </section>
             </div>
           </div>

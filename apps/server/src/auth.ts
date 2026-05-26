@@ -2,13 +2,24 @@ import crypto from "node:crypto";
 import jwt from "jsonwebtoken";
 import { db, UserRecord } from "./store.js";
 
-const JWT_SECRET = process.env.JWT_SECRET || "dev-secret";
+const isProduction = process.env.NODE_ENV === "production";
+const JWT_SECRET = process.env.JWT_SECRET;
+const DEV_JWT_SECRET = "dev-secret";
+if (isProduction && !JWT_SECRET) {
+  throw new Error("JWT_SECRET is required when NODE_ENV=production");
+}
+if (!isProduction && !JWT_SECRET) {
+  console.warn("[auth] JWT_SECRET is not set; using an insecure development fallback.");
+}
+
 const codeTTL = 5 * 60 * 1000;
+const maxAttempts = 5;
 
 type PendingCode = {
   phone: string;
   code: string;
   expiresAt: number;
+  attempts: number;
 };
 
 const pendingCodes = new Map<string, PendingCode>();
@@ -21,19 +32,29 @@ setInterval(() => {
 }, 60_000);
 
 export const requestSmsCode = (phone: string) => {
-  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  const code = crypto.randomInt(100000, 1000000).toString();
   pendingCodes.set(phone, {
     phone,
     code,
-    expiresAt: Date.now() + codeTTL
+    expiresAt: Date.now() + codeTTL,
+    attempts: 0
   });
 
-  return { code };
+  return isProduction ? {} : { code };
 };
+
+export const issueAuthToken = (user: UserRecord) =>
+  jwt.sign({ sub: user.id }, JWT_SECRET || DEV_JWT_SECRET, { expiresIn: "7d" });
 
 export const verifySmsCode = (phone: string, code: string) => {
   const pending = pendingCodes.get(phone);
-  if (!pending || pending.code !== code || pending.expiresAt < Date.now()) {
+  if (!pending || pending.expiresAt < Date.now()) {
+    pendingCodes.delete(phone);
+    return null;
+  }
+  if (pending.code !== code) {
+    pending.attempts += 1;
+    if (pending.attempts >= maxAttempts) pendingCodes.delete(phone);
     return null;
   }
   pendingCodes.delete(phone);
@@ -56,14 +77,14 @@ export const verifySmsCode = (phone: string, code: string) => {
     }
   }
 
-  const token = jwt.sign({ sub: user.id }, JWT_SECRET, { expiresIn: "7d" });
+  const token = issueAuthToken(user);
   return { user, token };
 };
 
 export const verifyToken = (token: string) => {
   try {
-    const payload = jwt.verify(token, JWT_SECRET) as { sub: string };
-    return payload.sub;
+    const payload = jwt.verify(token, JWT_SECRET || DEV_JWT_SECRET) as { sub?: unknown };
+    return typeof payload.sub === "string" ? payload.sub : null;
   } catch {
     return null;
   }
