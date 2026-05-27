@@ -41,10 +41,32 @@ const allowedOrigins = new Set(
     .filter(Boolean)
 );
 
+const isPrivateLanOrigin = (origin: string): boolean => {
+  try {
+    const url = new URL(origin);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return false;
+    const host = url.hostname;
+    if (host === "localhost") return true;
+    if (host === "[::1]") return true;
+    if (/^127\./.test(host)) return true;
+    if (/^10\./.test(host)) return true;
+    if (/^192\.168\./.test(host)) return true;
+    if (/^169\.254\./.test(host)) return true;
+    const m = host.match(/^172\.(\d+)\./);
+    if (m) {
+      const second = Number(m[1]);
+      if (second >= 16 && second <= 31) return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+};
+
 app.set("trust proxy", process.env.TRUST_PROXY === "true" ? 1 : false);
 app.use(cors({
   origin(origin, cb) {
-    if (!origin || allowedOrigins.has(origin)) {
+    if (!origin || allowedOrigins.has(origin) || isPrivateLanOrigin(origin)) {
       cb(null, true);
       return;
     }
@@ -153,7 +175,7 @@ app.post("/auth/request", (req, res) => {
     return;
   }
   const result = requestSmsCode(phone);
-  res.json({ ok: true, ...(!isProduction && "code" in result ? { devCode: result.code } : {}) });
+  res.json({ ok: true, ...("code" in result ? { devCode: result.code } : {}) });
 });
 
 app.post("/auth/verify", (req, res) => {
@@ -829,6 +851,7 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 });
 
 const port = Number(process.env.PORT || 4000);
-server.listen(port, () => {
-  console.log(`MAS server listening on http://localhost:${port}`);
+const host = process.env.HOST || "0.0.0.0";
+server.listen(port, host, () => {
+  console.log(`MAS server listening on http://${host}:${port} (LAN accessible)`);
 });

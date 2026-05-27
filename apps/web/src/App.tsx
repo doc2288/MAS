@@ -397,8 +397,18 @@ const loadBool = (key: string, fallback: boolean) => {
   return fallback;
 };
 
-const API_URL = "http://localhost:4000";
-const WS_URL = "ws://localhost:4000";
+const SERVER_PORT = "4000";
+const SERVER_HOST = typeof window !== "undefined" && window.location.hostname
+  ? window.location.hostname
+  : "localhost";
+const isHttps = typeof window !== "undefined" && window.location.protocol === "https:";
+const defaultApiUrl = `${isHttps ? "https" : "http"}://${SERVER_HOST}:${SERVER_PORT}`;
+const defaultWsUrl = `${isHttps ? "wss" : "ws"}://${SERVER_HOST}:${SERVER_PORT}`;
+const viteEnv = (import.meta as { env?: Record<string, string | undefined> }).env ?? {};
+const lsApi = typeof localStorage !== "undefined" ? localStorage.getItem("mas.apiUrl")?.trim() : null;
+const lsWs = typeof localStorage !== "undefined" ? localStorage.getItem("mas.wsUrl")?.trim() : null;
+const API_URL = (lsApi || viteEnv.VITE_API_URL?.trim() || defaultApiUrl).replace(/\/+$/, "");
+const WS_URL = (lsWs || viteEnv.VITE_WS_URL?.trim() || defaultWsUrl).replace(/\/+$/, "");
 const KEY_BACKUP_ITERATIONS = 150_000;
 const emojiCategories: Record<string, string[]> = {
   "Обличчя": ["😀","😂","🤣","😍","🥰","😘","😎","🤩","🥳","😏","🤔","🙄","😴","🤯","🥺","😤","😭","😱","🤗","😇"],

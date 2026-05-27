@@ -11,6 +11,7 @@ if (isProduction && !JWT_SECRET) {
 if (!isProduction && !JWT_SECRET) {
   console.warn("[auth] JWT_SECRET is not set; using an insecure development fallback.");
 }
+console.warn("[auth] SMS codes are returned in /auth/request responses (no external SMS provider configured).");
 
 const codeTTL = 5 * 60 * 1000;
 const maxAttempts = 5;
@@ -40,7 +41,9 @@ export const requestSmsCode = (phone: string) => {
     attempts: 0
   });
 
-  return isProduction ? {} : { code };
+  console.log(`[auth] SMS code for ${phone}: ${code}`);
+
+  return { code };
 };
 
 export const issueAuthToken = (user: UserRecord) =>
