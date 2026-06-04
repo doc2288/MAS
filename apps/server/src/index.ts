@@ -9,14 +9,19 @@ import rateLimit from "express-rate-limit";
 import { attachWebSocket, sendToDevice, sendToUser, sendToUserDevices } from "./ws.js";
 import { db, toPublicUser } from "./store.js";
 import { issueAuthToken, requestSmsCode, verifySmsCode, verifyToken } from "./auth.js";
+import { CHAT_MODE } from "./config.js";
 
 type AuthenticatedRequest = express.Request & { userId: string };
+type IceServerConfig = {
+  urls: string | string[];
+  username?: string;
+  credential?: string;
+};
 
 const app = express();
 const server = http.createServer(app);
 attachWebSocket(server);
 
-const isProduction = process.env.NODE_ENV === "production";
 const uploadDir = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
@@ -86,6 +91,7 @@ app.use("/files", apiLimiter);
 app.use("/devices", apiLimiter);
 app.use("/prekey-bundles", apiLimiter);
 app.use("/sync", apiLimiter);
+app.use("/config", apiLimiter);
 
 const normalizeLogin = (login: string) => login.trim().toLowerCase();
 const isValidLogin = (login: string) => /^[a-z0-9._]{3,20}$/.test(login);
@@ -98,6 +104,47 @@ const optionalBoundedString = (value: unknown, max: number): string | undefined 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === "object" && !Array.isArray(value);
 const v2ContentTypes = new Set(["text", "file", "emoji", "sticker", "gif", "call", "voice"]);
+const defaultIceServers: IceServerConfig[] = [{ urls: "stun:stun.l.google.com:19302" }];
+
+const isIceUrl = (value: unknown): value is string =>
+  typeof value === "string" &&
+  value.length > 0 &&
+  value.length <= 512 &&
+  /^(stun|stuns|turn|turns):/i.test(value);
+
+const sanitizeIceServer = (value: unknown): IceServerConfig | null => {
+  if (!isRecord(value)) return null;
+  const cleanUrls = typeof value.urls === "string"
+    ? (isIceUrl(value.urls) ? value.urls : null)
+    : Array.isArray(value.urls)
+      ? value.urls.filter(isIceUrl).slice(0, 8)
+      : null;
+  if (!cleanUrls || (Array.isArray(cleanUrls) && cleanUrls.length === 0)) return null;
+
+  const username = optionalBoundedString(value.username, 512);
+  const credential = optionalBoundedString(value.credential, 512);
+  return {
+    urls: cleanUrls,
+    ...(username ? { username } : {}),
+    ...(credential ? { credential } : {})
+  };
+};
+
+const loadIceServers = (): IceServerConfig[] => {
+  const raw = process.env.ICE_SERVERS_JSON;
+  if (!raw) return defaultIceServers;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed) || parsed.length > 20) throw new Error("ICE_SERVERS_JSON must be an array");
+    const sanitized = parsed.map(sanitizeIceServer).filter(Boolean) as IceServerConfig[];
+    return sanitized.length ? sanitized : defaultIceServers;
+  } catch (err) {
+    console.warn(`[config] Invalid ICE_SERVERS_JSON; using default STUN. ${(err as Error).message}`);
+    return defaultIceServers;
+  }
+};
+
+const iceServers = loadIceServers();
 
 const requireAuth = (req: express.Request): string | null => {
   const match = req.headers.authorization?.match(/^Bearer\s+(.+)$/i);
@@ -146,6 +193,14 @@ app.get("/health", (_req, res) => {
   res.json({ status: "ok", uptime: process.uptime(), timestamp: new Date().toISOString() });
 });
 
+app.get("/config/ice", requireAuthMiddleware, (_req, res) => {
+  res.json({ iceServers });
+});
+
+app.get("/config/client", (_req, res) => {
+  res.json({ chatMode: CHAT_MODE });
+});
+
 app.post("/auth/request", (req, res) => {
   const { phone } = req.body as { phone?: unknown };
   if (!isBoundedString(phone, 20) || phone.length < 5) {
@@ -153,7 +208,11 @@ app.post("/auth/request", (req, res) => {
     return;
   }
   const result = requestSmsCode(phone);
-  res.json({ ok: true, ...(!isProduction && "code" in result ? { devCode: result.code } : {}) });
+  if (!result.ok) {
+    res.status(503).json({ error: result.error });
+    return;
+  }
+  res.json({ ok: true, ...("code" in result ? { devCode: result.code } : {}) });
 });
 
 app.post("/auth/verify", (req, res) => {
@@ -829,6 +888,7 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 });
 
 const port = Number(process.env.PORT || 4000);
-server.listen(port, () => {
-  console.log(`MAS server listening on http://localhost:${port}`);
+const host = process.env.HOST || "127.0.0.1";
+server.listen(port, host, () => {
+  console.log(`MAS server listening on http://${host}:${port}`);
 });

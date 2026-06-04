@@ -50,6 +50,7 @@ type ChatSummary = {
 
 type CallState = {
   status: "idle" | "calling" | "incoming" | "in-call";
+  peerId?: string;
   offer?: RTCSessionDescriptionInit;
   callerId?: string;
   pc?: RTCPeerConnection;
@@ -59,6 +60,7 @@ type CallState = {
 };
 
 type KeyPairState = { publicKey: string; secretKey: string };
+type ChatMode = "cloud" | "legacy";
 
 type KeyBackupPayload = {
   ciphertext: string;
@@ -397,8 +399,72 @@ const loadBool = (key: string, fallback: boolean) => {
   return fallback;
 };
 
-const API_URL = "http://localhost:4000";
-const WS_URL = "ws://localhost:4000";
+const normalizeApiUrl = (value?: string | null): string | null => {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  try {
+    const url = new URL(trimmed);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    url.pathname = url.pathname.replace(/\/+$/, "");
+    url.search = "";
+    url.hash = "";
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    return null;
+  }
+};
+
+const normalizeWsUrl = (value?: string | null): string | null => {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  try {
+    const url = new URL(trimmed);
+    if (url.protocol !== "ws:" && url.protocol !== "wss:") return null;
+    url.pathname = url.pathname.replace(/\/+$/, "");
+    url.search = "";
+    url.hash = "";
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    return null;
+  }
+};
+
+const DEFAULT_API_URL = normalizeApiUrl(import.meta.env.VITE_API_URL) ?? "http://localhost:4000";
+const API_URL_STORAGE_KEY = "mas.apiUrl";
+const DEFAULT_ICE_SERVERS: RTCIceServer[] = [{ urls: "stun:stun.l.google.com:19302" }];
+const DEFAULT_CHAT_MODE: ChatMode = "cloud";
+
+const loadApiUrl = () =>
+  normalizeApiUrl(localStorage.getItem(API_URL_STORAGE_KEY)) ?? DEFAULT_API_URL;
+
+const deriveWsUrl = (apiUrl: string) => {
+  const url = new URL(apiUrl);
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  return url.toString().replace(/\/$/, "");
+};
+
+const resolveWsUrl = (apiUrl: string) => {
+  const storedApiUrl = normalizeApiUrl(localStorage.getItem(API_URL_STORAGE_KEY));
+  const envWsUrl = normalizeWsUrl(import.meta.env.VITE_WS_URL);
+  return !storedApiUrl && envWsUrl ? envWsUrl : deriveWsUrl(apiUrl);
+};
+
+const readIceServers = (value: unknown): RTCIceServer[] | null => {
+  if (!Array.isArray(value)) return null;
+  const servers = value.filter((item): item is RTCIceServer => {
+    if (!item || typeof item !== "object") return false;
+    const urls = (item as { urls?: unknown }).urls;
+    return typeof urls === "string" || (Array.isArray(urls) && urls.length > 0 && urls.every((url) => typeof url === "string"));
+  });
+  return servers.length ? servers : null;
+};
+
+const readChatMode = (value: unknown): ChatMode | null => {
+  if (!value || typeof value !== "object") return null;
+  const mode = (value as { chatMode?: unknown }).chatMode;
+  return mode === "cloud" || mode === "legacy" ? mode : null;
+};
+
 const KEY_BACKUP_ITERATIONS = 150_000;
 const emojiCategories: Record<string, string[]> = {
   "Обличчя": ["😀","😂","🤣","😍","🥰","😘","😎","🤩","🥳","😏","🤔","🙄","😴","🤯","🥺","😤","😭","😱","🤗","😇"],
@@ -411,6 +477,8 @@ const allEmojis = Object.values(emojiCategories).flat();
 
 const formatTime = (iso: string) =>
   new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+const isDecryptFailed = (message: UiMessage) => message.meta?.decryptFailed === "true";
 
 const formatDate = (iso: string, lang: Lang) => {
   const d = new Date(iso);
@@ -541,6 +609,10 @@ export default function App() {
   const [messages, setMessages] = useState<UiMessage[]>([]);
   const [chatList, setChatList] = useState<ChatSummary[]>([]);
   const [status, setStatus] = useState("");
+  const [apiUrl, setApiUrl] = useState(() => loadApiUrl());
+  const [serverUrlInput, setServerUrlInput] = useState(apiUrl);
+  const [iceServers, setIceServers] = useState<RTCIceServer[]>(DEFAULT_ICE_SERVERS);
+  const [chatMode, setChatMode] = useState<ChatMode>(DEFAULT_CHAT_MODE);
   const t = useCallback((key: TranslationKey) => translations[language][key], [language]);
   const ta = useCallback((key: AuthFlowKey) => authFlowText[language][key], [language]);
   
@@ -600,7 +672,10 @@ export default function App() {
   const peerTypingTimerRef = useRef<number | null>(null);
   const peerRef = useRef<User | null>(null);
   const callRef = useRef<CallState>({ status: "idle" });
-  const screenShareRef = useRef<{ stream: MediaStream; originalTrack: MediaStreamTrack | null; sender: RTCRtpSender | null } | null>(null);
+  const screenShareRef = useRef<{ stream: MediaStream; originalTrack: MediaStreamTrack | null; sender: RTCRtpSender | null; wasVideo: boolean } | null>(null);
+  const pendingIceCandidatesRef = useRef<Record<string, RTCIceCandidateInit[]>>({});
+  const API_URL = apiUrl;
+  const WS_URL = useMemo(() => resolveWsUrl(apiUrl), [apiUrl]);
 
   useEffect(() => { peerRef.current = peer; }, [peer]);
   useEffect(() => { callRef.current = call; }, [call]);
@@ -608,6 +683,29 @@ export default function App() {
   useEffect(() => { localStorage.setItem("mas.notifications", String(notificationsEnabled)); }, [notificationsEnabled]);
   useEffect(() => { localStorage.setItem("mas.readReceipts", String(readReceipts)); }, [readReceipts]);
   useEffect(() => { localStorage.setItem("mas.typingIndicator", String(typingIndicator)); }, [typingIndicator]);
+
+  useEffect(() => {
+    setServerUrlInput(apiUrl);
+  }, [apiUrl]);
+
+  const saveServerUrl = () => {
+    const nextUrl = normalizeApiUrl(serverUrlInput);
+    if (!nextUrl) {
+      setStatus("Enter a valid http(s) server URL.");
+      return;
+    }
+    localStorage.setItem(API_URL_STORAGE_KEY, nextUrl);
+    setApiUrl(nextUrl);
+    setServerUrlInput(nextUrl);
+    setStatus("Server URL saved.");
+  };
+
+  const resetServerUrl = () => {
+    localStorage.removeItem(API_URL_STORAGE_KEY);
+    setApiUrl(DEFAULT_API_URL);
+    setServerUrlInput(DEFAULT_API_URL);
+    setStatus("Server URL reset.");
+  };
 
   const scrollToBottom = useCallback(() => {
     setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
@@ -620,7 +718,7 @@ export default function App() {
         case "gif": return "GIF";
         case "sticker": return t("sticker");
         case "emoji": return t("emoji");
-        default: return t("encryptedMessage");
+        default: return chatMode === "cloud" ? t("message") : t("encryptedMessage");
       }
     };
     const items = chatList.map((item) => ({
@@ -643,7 +741,7 @@ export default function App() {
         item.phone.toLowerCase().includes(q) ||
         item.lastMessage.toLowerCase().includes(q)
     );
-  }, [chatList, chatQuery, onlineUserIds, unreadMap, t]);
+  }, [chatList, chatQuery, onlineUserIds, unreadMap, t, chatMode]);
 
   const countryOptions = useMemo(() => {
     const makeDisplay = (locale: string) => {
@@ -708,6 +806,39 @@ export default function App() {
     [token]
   );
 
+  useEffect(() => {
+    if (!token) {
+      setIceServers(DEFAULT_ICE_SERVERS);
+      return;
+    }
+    let cancelled = false;
+    fetch(`${API_URL}/config/ice`, { headers: authHeaders })
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => {
+        if (cancelled || !data) return;
+        const nextServers = readIceServers((data as { iceServers?: unknown }).iceServers);
+        setIceServers(nextServers ?? DEFAULT_ICE_SERVERS);
+      })
+      .catch(() => {
+        if (!cancelled) setIceServers(DEFAULT_ICE_SERVERS);
+      });
+    return () => { cancelled = true; };
+  }, [token, authHeaders, API_URL]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_URL}/config/client`)
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => {
+        if (cancelled) return;
+        setChatMode(readChatMode(data) ?? DEFAULT_CHAT_MODE);
+      })
+      .catch(() => {
+        if (!cancelled) setChatMode(DEFAULT_CHAT_MODE);
+      });
+    return () => { cancelled = true; };
+  }, [API_URL]);
+
   const fetchChats = useCallback(async () => {
     if (!token) return;
     try {
@@ -716,7 +847,7 @@ export default function App() {
       const data = (await res.json()) as ChatSummary[];
       setChatList(data);
     } catch { /* offline */ }
-  }, [token, authHeaders]);
+  }, [token, authHeaders, API_URL]);
 
   const handleLanguageChange = (next: Lang) => {
     setLanguage(next);
@@ -775,7 +906,7 @@ export default function App() {
       const data = (await res.json()) as User[];
       setLoginMatches(data);
     } catch { setLoginMatches([]); }
-  }, [chatQuery, authHeaders]);
+  }, [chatQuery, authHeaders, API_URL]);
 
   useEffect(() => {
     if (!token) return;
@@ -794,18 +925,27 @@ export default function App() {
         if (data?.login) setLoginValue(data.login);
       })
       .catch(() => {});
-  }, [token, authHeaders]);
+  }, [token, authHeaders, API_URL]);
 
   useEffect(() => { fetchChats(); }, [fetchChats]);
 
   useEffect(() => {
-    if (!token) return;
+    if (!token || !user) return;
+    if (chatMode === "cloud") return;
     if (keys) {
-      fetch(`${API_URL}/keys`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders },
-        body: JSON.stringify({ publicKey: keys.publicKey })
-      }).catch(() => {});
+      if (!user.publicKey) {
+        fetch(`${API_URL}/keys`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders },
+          body: JSON.stringify({ publicKey: keys.publicKey })
+        })
+          .then((res) => {
+            if (res.ok) setUser((prev) => prev ? { ...prev, publicKey: keys.publicKey } : prev);
+          })
+          .catch(() => {});
+      } else if (user.publicKey !== keys.publicKey) {
+        setStatus("This account already has a different encryption key. Restore the key backup or use this device for new messages only.");
+      }
       return;
     }
     (async () => {
@@ -817,11 +957,15 @@ export default function App() {
           return;
         }
       } catch { /* ignore */ }
+      if (user.publicKey) {
+        setStatus("This account already has an encryption key, but no backup was found. Old messages cannot be decrypted on this device.");
+        return;
+      }
       const pair = generateKeyPair();
       localStorage.setItem("mas.keys", JSON.stringify(pair));
       setKeys(pair);
     })();
-  }, [token, keys, authHeaders, t]);
+  }, [token, user, keys, authHeaders, t, API_URL, chatMode]);
 
   const saveKeyBackup = async () => {
     if (!keys) { setStatus(t("keysNotReady")); return; }
@@ -947,38 +1091,51 @@ export default function App() {
         }
       }
       if (type === "call.offer") {
-        if (payload.renegotiate && callRef.current.pc && callRef.current.status === "in-call") {
-          const pc = callRef.current.pc;
-          await pc.setRemoteDescription(payload.offer);
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          if (wsRef.current?.readyState === WebSocket.OPEN) {
-            wsRef.current.send(JSON.stringify({
-              type: "call.answer", payload: { to: payload.from, answer }
-            }));
-          }
-        } else {
-          setCall((prev) => ({
-            ...prev, status: "incoming", offer: payload.offer,
-            isVideo: payload.isVideo, callerId: payload.from
-          }));
-          if (!peerRef.current || peerRef.current.id !== payload.from) {
-            fetchPeerById(payload.from).then((u) => { if (u) setPeer(u); });
-          }
+        const from = typeof payload.from === "string" ? payload.from : undefined;
+        if (!from || !payload.offer) return;
+        if (payload.renegotiate) {
+          await handleRenegotiateOffer(from, payload.offer, Boolean(payload.isVideo));
+          return;
+        }
+        if (callRef.current.status !== "idle") {
+          sendCallSignal("call.end", from);
+          return;
+        }
+        const incomingCall: CallState = {
+          ...callRef.current,
+          status: "incoming",
+          offer: payload.offer,
+          isVideo: Boolean(payload.isVideo),
+          callerId: from,
+          peerId: from
+        };
+        callRef.current = incomingCall;
+        setCall(incomingCall);
+        if (!peerRef.current || peerRef.current.id !== from) {
+          fetchPeerById(from).then((u) => { if (u) setPeer(u); });
         }
       }
       if (type === "call.answer") {
-        if (callRef.current.pc && payload.answer) {
-          await callRef.current.pc.setRemoteDescription(payload.answer);
+        const from = typeof payload.from === "string" ? payload.from : undefined;
+        const currentCall = callRef.current;
+        if (currentCall.pc && payload.answer && (!from || currentCall.peerId === from)) {
+          await currentCall.pc.setRemoteDescription(payload.answer);
+          if (currentCall.peerId) await flushPendingIceCandidates(currentCall.pc, currentCall.peerId);
+          callRef.current = { ...currentCall, status: "in-call" };
           setCall((prev) => ({ ...prev, status: "in-call" }));
         }
       }
       if (type === "call.ice") {
-        if (callRef.current.pc && payload.candidate) {
-          await callRef.current.pc.addIceCandidate(payload.candidate);
+        const from = typeof payload.from === "string" ? payload.from : undefined;
+        if (from && payload.candidate) {
+          await handleRemoteIceCandidate(from, payload.candidate);
         }
       }
-      if (type === "call.end") { endCall(); }
+      if (type === "call.end") {
+        const from = typeof payload.from === "string" ? payload.from : undefined;
+        const currentPeerId = getCallPeerId(callRef.current);
+        if (!from || !currentPeerId || from === currentPeerId) endCall({ notifyPeer: false });
+      }
     };
 
     ws.onclose = () => {
@@ -991,7 +1148,7 @@ export default function App() {
     ws.onerror = () => {
       ws.close();
     };
-  }, [token, fetchChats, notificationsEnabled, t]);
+  }, [token, fetchChats, notificationsEnabled, t, WS_URL]);
 
   useEffect(() => {
     if (!token) return;
@@ -1035,11 +1192,16 @@ export default function App() {
     return () => window.removeEventListener("click", close);
   }, [ctxMenu]);
 
+  const visibleMessages = useMemo(() => messages.filter((message) => !isDecryptFailed(message)), [messages]);
+  const hiddenDecryptFailedCount = messages.length - visibleMessages.length;
+
   const filteredMessages = useMemo(() => {
-    if (!chatSearch.trim()) return messages;
+    if (!chatSearch.trim()) return visibleMessages;
     const q = chatSearch.toLowerCase();
-    return messages.filter((m) => m.text?.toLowerCase().includes(q));
-  }, [messages, chatSearch]);
+    return visibleMessages.filter((m) => m.text?.toLowerCase().includes(q));
+  }, [visibleMessages, chatSearch]);
+  const hasAccountKeyMismatch = Boolean(chatMode !== "cloud" && keys && user?.publicKey && user.publicKey !== keys.publicKey);
+  const accountKeyMismatchStatus = "This account already has a different encryption key. Restore the key backup before sending.";
 
   const requestCode = async () => {
     if (!isValidPhoneNumber(fullPhone)) { setStatus(t("invalidPhone")); return false; }
@@ -1100,7 +1262,7 @@ export default function App() {
     } catch {
       setStatus(ta("qrStartFailed"));
     }
-  }, [ta]);
+  }, [ta, API_URL]);
 
   useEffect(() => {
     if (authStep === "qr" && !qrSession && !qrDataUrl) {
@@ -1147,7 +1309,7 @@ export default function App() {
       stopped = true;
       window.clearInterval(timer);
     };
-  }, [authStep, qrSession, t, ta]);
+  }, [authStep, qrSession, t, ta, API_URL]);
 
   const logout = () => {
     setToken(null); setUser(null); setPeer(null); setMessages([]);
@@ -1170,7 +1332,8 @@ export default function App() {
   };
 
   const loadMessages = async (peerId: string, append = false) => {
-    if (!token || !keys) return;
+    if (!token) return;
+    if (chatMode !== "cloud" && !keys) return;
     try {
       const offset = append ? messages.length : 0;
       const res = await fetch(`${API_URL}/messages/${peerId}?limit=100&offset=${offset}`, { headers: authHeaders });
@@ -1218,6 +1381,30 @@ export default function App() {
 
   const decryptIncoming = async (payload: any): Promise<UiMessage> => {
     const isMine = payload.from === user?.id;
+    if (typeof payload.body === "string") {
+      const msgStatus = isMine
+        ? payload.readAt ? "read" : payload.deliveredAt ? "delivered" : "sent"
+        : undefined;
+      return {
+        id: payload.id, from: payload.from, to: payload.to,
+        createdAt: payload.createdAt, contentType: payload.contentType,
+        text: payload.body, meta: payload.meta,
+        isMine, status: msgStatus as UiMessage["status"],
+        replyToId: payload.replyToId,
+        editedAt: payload.editedAt,
+        pinned: payload.pinned,
+        reactions: payload.reactions
+      };
+    }
+    if (!keys && chatMode === "cloud") {
+      return {
+        id: payload.id, from: payload.from, to: payload.to,
+        createdAt: payload.createdAt, contentType: payload.contentType,
+        text: "Old encrypted message cannot be recovered",
+        meta: { ...payload.meta, legacyUnrecoverable: "true" },
+        isMine
+      };
+    }
     if (!keys) {
       return {
         id: payload.id, from: payload.from, to: payload.to,
@@ -1247,6 +1434,10 @@ export default function App() {
     // Try peer-encrypted copy with own publicKey (in case the message was to ourselves)
     if (!text && payload.ciphertext && payload.nonce) {
       text = tryDecrypt(payload.nonce, payload.ciphertext, keys.publicKey, keys.secretKey);
+    }
+
+    if (!text && payload.contentType === "text" && chatMode === "cloud") {
+      text = "Old encrypted message cannot be recovered";
     }
 
     if (!text && payload.contentType === "text") {
@@ -1318,19 +1509,37 @@ export default function App() {
     replyToId?: string
   ) => {
     if (!peer) { setStatus(t("chooseChat")); return; }
-    if (!keys) { setStatus(t("keysNotReady")); return; }
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       setStatus(t("noConnection")); return;
     }
+    const id = crypto.randomUUID();
+    const createdAt = new Date().toISOString();
+    const payloadText = text ?? "";
+    if (chatMode === "cloud") {
+      wsRef.current.send(JSON.stringify({
+        type: "message.send",
+        payload: {
+          id, to: peer.id, createdAt, contentType,
+          body: payloadText,
+          meta,
+          ...(replyToId ? { replyToId } : {})
+        }
+      }));
+      setMessages((prev) => [
+        ...prev,
+        { id, from: user?.id ?? "", to: peer.id, createdAt, contentType, text, meta, isMine: true, status: "sent", replyToId }
+      ]);
+      fetchChats();
+      return;
+    }
+    if (!keys) { setStatus(t("keysNotReady")); return; }
+    if (hasAccountKeyMismatch) { setStatus(accountKeyMismatchStatus); return; }
     let targetKey = peer.publicKey;
     if (!targetKey) {
       const refreshed = await fetchPeerById(peer.id);
       if (refreshed?.publicKey) { setPeer(refreshed); targetKey = refreshed.publicKey; }
       else { setStatus(t("peerNoPublicKey")); return; }
     }
-    const id = crypto.randomUUID();
-    const createdAt = new Date().toISOString();
-    const payloadText = text ?? "";
     const encrypted = encryptMessage(payloadText, keys.secretKey, targetKey);
     const selfEncrypted = encryptMessage(payloadText, keys.secretKey, keys.publicKey);
     wsRef.current.send(JSON.stringify({
@@ -1366,7 +1575,20 @@ export default function App() {
   };
 
   const editMessage = async (msgId: string, newText: string) => {
-    if (!peer || !keys || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+    if (!peer || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+    if (chatMode === "cloud") {
+      wsRef.current.send(JSON.stringify({
+        type: "message.edit",
+        payload: { id: msgId, peerId: peer.id, body: newText }
+      }));
+      setMessages((prev) => prev.map((m) =>
+        m.id === msgId ? { ...m, text: newText, editedAt: new Date().toISOString() } : m
+      ));
+      setEditingMsg(null);
+      return;
+    }
+    if (!keys) return;
+    if (hasAccountKeyMismatch) { setStatus(accountKeyMismatchStatus); return; }
     let targetKey = peer.publicKey;
     if (!targetKey) return;
     const encrypted = encryptMessage(newText, keys.secretKey, targetKey);
@@ -1444,7 +1666,26 @@ export default function App() {
   };
 
   const handleFile = async (file: File | null) => {
-    if (!file || !peer || !keys) return;
+    if (!file || !peer) return;
+    if (chatMode === "cloud") {
+      try {
+        const form = new FormData();
+        form.append("file", file, file.name);
+        form.append("peerId", peer.id);
+        const res = await fetch(`${API_URL}/files`, {
+          method: "POST", headers: authHeaders, body: form
+        });
+        if (!res.ok) { setStatus(t("uploadFailed")); return; }
+        const data = await res.json();
+        await sendMessage("file", "", {
+          fileName: file.name, fileType: file.type,
+          fileId: data.fileId
+        });
+      } catch { setStatus(t("uploadFailed")); }
+      return;
+    }
+    if (!keys) return;
+    if (hasAccountKeyMismatch) { setStatus(accountKeyMismatchStatus); return; }
     if (!peer.publicKey) { setStatus(t("peerNoPublicKey")); return; }
     try {
       const bytes = new Uint8Array(await file.arrayBuffer());
@@ -1467,13 +1708,21 @@ export default function App() {
   };
 
   const decryptFile = async (msg: UiMessage) => {
-    if (!msg.meta || !keys || !peer) return;
+    if (!msg.meta || !peer) return;
     try {
       const fileUrl = msg.meta.fileId ? `${API_URL}/files/${msg.meta.fileId}` : msg.meta.fileUrl;
       if (!fileUrl) { setStatus(t("fileUnavailable")); return; }
       const response = await fetch(fileUrl, { headers: authHeaders });
       if (!response.ok) { setStatus(t("fileUnavailable")); return; }
       const buffer = new Uint8Array(await response.arrayBuffer());
+      if (chatMode === "cloud" || !msg.meta.nonce) {
+        const blobOut = new Blob([buffer as any], { type: msg.meta.fileType || "application/octet-stream" });
+        const url = URL.createObjectURL(blobOut);
+        window.open(url, "_blank", "noopener,noreferrer");
+        window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+        return;
+      }
+      if (!keys) { setStatus(t("keysNotReady")); return; }
       const decrypted = decryptBytes(
         msg.meta.nonce, toBase64(buffer),
         msg.meta.senderPublicKey ?? peer.publicKey ?? "", keys.secretKey
@@ -1687,10 +1936,121 @@ export default function App() {
     }
   };
 
+  const getCallPeerId = (state = callRef.current) =>
+    state.peerId ?? state.callerId ?? peerRef.current?.id;
+
+  const hasLiveLocalVideo = (stream?: MediaStream) =>
+    Boolean(stream?.getVideoTracks().some((track) => track.readyState !== "ended"));
+
+  const stopStreamTracks = (stream?: MediaStream | null) => {
+    stream?.getTracks().forEach((track) => {
+      track.onended = null;
+      track.stop();
+    });
+  };
+
+  const sendCallSignal = (
+    type: "call.offer" | "call.answer" | "call.ice" | "call.end",
+    peerId: string,
+    payload: Record<string, unknown> = {}
+  ) => {
+    if (wsRef.current?.readyState !== WebSocket.OPEN) return false;
+    wsRef.current.send(JSON.stringify({ type, payload: { to: peerId, ...payload } }));
+    return true;
+  };
+
+  const queueIceCandidate = (peerId: string, candidate: RTCIceCandidateInit) => {
+    const queue = pendingIceCandidatesRef.current[peerId] ?? [];
+    if (queue.length < 50) queue.push(candidate);
+    pendingIceCandidatesRef.current[peerId] = queue;
+  };
+
+  const flushPendingIceCandidates = async (pc: RTCPeerConnection, peerId: string) => {
+    const queue = pendingIceCandidatesRef.current[peerId] ?? [];
+    delete pendingIceCandidatesRef.current[peerId];
+    for (const candidate of queue) {
+      try {
+        await pc.addIceCandidate(candidate);
+      } catch { /* stale candidate */ }
+    }
+  };
+
+  const handleRemoteIceCandidate = async (peerId: string, candidate: RTCIceCandidateInit) => {
+    const currentCall = callRef.current;
+    if (currentCall.status === "idle" && currentCall.peerId !== peerId) return;
+    const pc = currentCall.pc;
+    if (!pc || currentCall.peerId !== peerId || !pc.remoteDescription) {
+      queueIceCandidate(peerId, candidate);
+      return;
+    }
+    try {
+      await pc.addIceCandidate(candidate);
+    } catch { /* stale candidate */ }
+  };
+
+  const configurePeerConnection = (pc: RTCPeerConnection, peerId: string) => {
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        sendCallSignal("call.ice", peerId, { candidate: event.candidate });
+      }
+    };
+    pc.ontrack = (event) => {
+      const stream = event.streams[0];
+      if (remoteAudioRef.current) remoteAudioRef.current.srcObject = stream;
+      setCall((prev) => ({
+        ...prev,
+        remoteStream: stream,
+        isVideo: prev.isVideo || Boolean(stream?.getVideoTracks().length)
+      }));
+      callRef.current = {
+        ...callRef.current,
+        remoteStream: stream,
+        isVideo: callRef.current.isVideo || Boolean(stream?.getVideoTracks().length)
+      };
+    };
+  };
+
+  const renegotiateCall = async (pc: RTCPeerConnection, peerId: string, isVideo: boolean) => {
+    if (pc.signalingState === "closed") return;
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    sendCallSignal("call.offer", peerId, {
+      offer: pc.localDescription,
+      isVideo,
+      renegotiate: true
+    });
+  };
+
+  const handleRenegotiateOffer = async (
+    peerId: string,
+    offer: RTCSessionDescriptionInit,
+    remoteWantsVideo: boolean
+  ) => {
+    const currentCall = callRef.current;
+    const pc = currentCall.pc;
+    if (!pc || currentCall.status !== "in-call" || currentCall.peerId !== peerId) {
+      sendCallSignal("call.end", peerId);
+      return;
+    }
+    try {
+      await pc.setRemoteDescription(offer);
+      await flushPendingIceCandidates(pc, peerId);
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      sendCallSignal("call.answer", peerId, { answer: pc.localDescription ?? answer });
+      const isVideo = remoteWantsVideo || Boolean(screenShareRef.current) || hasLiveLocalVideo(currentCall.localStream);
+      callRef.current = { ...callRef.current, isVideo };
+      setCall((prev) => prev.peerId === peerId ? { ...prev, isVideo } : prev);
+    } catch {
+      endCall({ notifyPeer: true, peerId });
+    }
+  };
+
   const toggleCamera = async () => {
     const pc = callRef.current.pc;
     const stream = callRef.current.localStream;
-    if (!pc || !stream) return;
+    const targetId = getCallPeerId();
+    if (!pc || !stream || !targetId) return;
     const existingTrack = stream.getVideoTracks()[0];
 
     if (existingTrack) {
@@ -1701,34 +2061,31 @@ export default function App() {
       return;
     }
 
+    let camStream: MediaStream | null = null;
+    let camTrack: MediaStreamTrack | null = null;
+    let sender: RTCRtpSender | null = null;
     try {
-      const camStream = await navigator.mediaDevices.getUserMedia({ video: true });
-      const camTrack = camStream.getVideoTracks()[0];
+      camStream = await navigator.mediaDevices.getUserMedia({ video: true });
+      camTrack = camStream.getVideoTracks()[0];
+      if (!camTrack) throw new Error("camera_track_missing");
       stream.addTrack(camTrack);
-      pc.addTrack(camTrack, stream);
+      sender = pc.addTrack(camTrack, stream);
+      await renegotiateCall(pc, targetId, true);
 
-      if (pc.signalingState !== "closed") {
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        const targetId = peerRef.current?.id ?? callRef.current.callerId;
-        if (targetId && wsRef.current?.readyState === WebSocket.OPEN) {
-          wsRef.current.send(JSON.stringify({
-            type: "call.offer",
-            payload: { to: targetId, offer: pc.localDescription, isVideo: true, renegotiate: true }
-          }));
-        }
-      }
-
+      callRef.current = { ...callRef.current, isVideo: true, localStream: stream };
       setCall((prev) => ({ ...prev, isVideo: true, localStream: stream }));
       const parts = callWindowPartsRef.current;
       if (parts?.camBtn) parts.camBtn.className = "btn btn-default";
       if (parts?.localVideo) {
-        parts.localVideo.srcObject = stream;
+        parts.localVideo.srcObject = screenShareRef.current?.stream ?? stream;
         parts.localVideo.style.display = "block";
         parts.localVideo.style.opacity = "1";
       }
       switchCallWindowToVideo();
     } catch {
+      if (sender && pc.signalingState !== "closed") pc.removeTrack(sender);
+      if (camTrack) stream.removeTrack(camTrack);
+      stopStreamTracks(camStream);
       setStatus(t("cameraEnableFailed"));
     }
   };
@@ -1746,43 +2103,47 @@ export default function App() {
     if (centerArea) centerArea.style.display = "none";
   };
 
-  const stopScreenShare = () => {
+  const stopScreenShare = async () => {
     const ss = screenShareRef.current;
     if (!ss) return;
-    ss.stream.getTracks().forEach((t) => t.stop());
+    screenShareRef.current = null;
+    stopStreamTracks(ss.stream);
     const pc = callRef.current.pc;
-    if (pc && ss.sender) {
-      if (ss.originalTrack) {
-        ss.sender.replaceTrack(ss.originalTrack);
-      } else {
-        pc.removeTrack(ss.sender);
-        if (pc.signalingState !== "closed") {
-          pc.createOffer().then((o) => pc.setLocalDescription(o)).then(() => {
-            const targetId = peerRef.current?.id ?? callRef.current.callerId;
-            if (targetId && wsRef.current?.readyState === WebSocket.OPEN) {
-              wsRef.current.send(JSON.stringify({
-                type: "call.offer", payload: { to: targetId, offer: pc.localDescription, isVideo: callRef.current.isVideo, renegotiate: true }
-              }));
-            }
-          }).catch(() => {});
+    const targetId = getCallPeerId();
+    const nextIsVideo = ss.wasVideo || hasLiveLocalVideo(callRef.current.localStream);
+    try {
+      if (pc && ss.sender && pc.signalingState !== "closed") {
+        if (ss.originalTrack) {
+          await ss.sender.replaceTrack(ss.originalTrack);
+        } else {
+          pc.removeTrack(ss.sender);
+          if (targetId) await renegotiateCall(pc, targetId, nextIsVideo);
         }
       }
+    } catch {
+      setStatus(t("callStartFailed"));
     }
-    screenShareRef.current = null;
     updateScreenBtnState(false);
-    updateCallWindowScreenMode(false);
+    updateCallWindowScreenMode(false, nextIsVideo);
+    callRef.current = { ...callRef.current, isVideo: nextIsVideo };
+    setCall((prev) => ({ ...prev, isVideo: nextIsVideo }));
   };
 
   const shareScreen = async () => {
     if (screenShareRef.current) { stopScreenShare(); return; }
     const pc = callRef.current.pc;
-    if (!pc) return;
+    const targetId = getCallPeerId();
+    if (!pc || !targetId) return;
+    let screenStream: MediaStream | null = null;
+    let sender: RTCRtpSender | null = null;
+    let originalTrack: MediaStreamTrack | null = null;
+    let addedSender = false;
     try {
-      const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+      screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
       const screenTrack = screenStream.getVideoTracks()[0];
+      if (!screenTrack) throw new Error("screen_track_missing");
       const existingSender = pc.getSenders().find((s) => s.track?.kind === "video");
-      let sender: RTCRtpSender;
-      let originalTrack: MediaStreamTrack | null = null;
+      const wasVideo = Boolean(callRef.current.isVideo);
 
       if (existingSender) {
         originalTrack = existingSender.track;
@@ -1790,21 +2151,15 @@ export default function App() {
         sender = existingSender;
       } else {
         sender = pc.addTrack(screenTrack, screenStream);
-        if (pc.signalingState !== "closed") {
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
-          const targetId = peerRef.current?.id ?? callRef.current.callerId;
-          if (targetId && wsRef.current?.readyState === WebSocket.OPEN) {
-            wsRef.current.send(JSON.stringify({
-              type: "call.offer", payload: { to: targetId, offer: pc.localDescription, isVideo: callRef.current.isVideo, renegotiate: true }
-            }));
-          }
-        }
+        addedSender = true;
+        await renegotiateCall(pc, targetId, true);
       }
 
-      screenShareRef.current = { stream: screenStream, originalTrack, sender };
+      screenShareRef.current = { stream: screenStream, originalTrack, sender, wasVideo };
       updateScreenBtnState(true);
-      updateCallWindowScreenMode(true);
+      updateCallWindowScreenMode(true, wasVideo);
+      callRef.current = { ...callRef.current, isVideo: true };
+      setCall((prev) => ({ ...prev, isVideo: true }));
 
       const parts = callWindowPartsRef.current;
       if (parts?.localVideo) {
@@ -1814,7 +2169,14 @@ export default function App() {
       }
 
       screenTrack.onended = () => stopScreenShare();
-    } catch { /* user cancelled picker */ }
+    } catch {
+      if (sender && originalTrack) {
+        sender.replaceTrack(originalTrack).catch(() => {});
+      } else if (sender && addedSender && pc.signalingState !== "closed") {
+        pc.removeTrack(sender);
+      }
+      stopStreamTracks(screenStream);
+    }
   };
 
   const updateScreenBtnState = (active: boolean) => {
@@ -1826,15 +2188,21 @@ export default function App() {
     if (indicator) indicator.style.display = active ? "flex" : "none";
   };
 
-  const updateCallWindowScreenMode = (sharing: boolean) => {
+  const updateCallWindowScreenMode = (sharing: boolean, isVideo = Boolean(callRef.current.isVideo)) => {
     const win = callWindowRef.current;
     if (!win) return;
     const wrap = win.document.getElementById("callWrap");
     const centerArea = win.document.getElementById("centerArea");
-    if (sharing && !callRef.current.isVideo) {
+    const parts = callWindowPartsRef.current;
+    if (!sharing && parts?.localVideo) {
+      parts.localVideo.style.width = ""; parts.localVideo.style.height = "";
+      parts.localVideo.style.position = ""; parts.localVideo.style.inset = "";
+      parts.localVideo.style.borderRadius = ""; parts.localVideo.style.border = "";
+      parts.localVideo.style.zIndex = ""; parts.localVideo.style.cursor = "";
+    }
+    if (sharing && !isVideo) {
       wrap?.classList.add("video-overlay");
       if (centerArea) centerArea.style.display = "none";
-      const parts = callWindowPartsRef.current;
       if (parts?.localVideo) {
         parts.localVideo.style.display = "block";
         parts.localVideo.style.width = "100%";
@@ -1846,20 +2214,14 @@ export default function App() {
         parts.localVideo.style.zIndex = "0";
         parts.localVideo.style.cursor = "default";
       }
-    } else if (!sharing && !callRef.current.isVideo) {
+    } else if (!sharing && !isVideo) {
       wrap?.classList.remove("video-overlay");
       if (centerArea) centerArea.style.display = "flex";
-      const parts = callWindowPartsRef.current;
       if (parts?.localVideo) {
         parts.localVideo.style.display = "none";
         parts.localVideo.srcObject = callRef.current.localStream ?? null;
-        parts.localVideo.style.width = ""; parts.localVideo.style.height = "";
-        parts.localVideo.style.position = ""; parts.localVideo.style.inset = "";
-        parts.localVideo.style.borderRadius = ""; parts.localVideo.style.border = "";
-        parts.localVideo.style.zIndex = ""; parts.localVideo.style.cursor = "";
       }
-    } else if (!sharing && callRef.current.isVideo) {
-      const parts = callWindowPartsRef.current;
+    } else if (!sharing && isVideo) {
       if (parts?.localVideo) {
         parts.localVideo.srcObject = callRef.current.localStream ?? null;
       }
@@ -1874,7 +2236,8 @@ export default function App() {
 
     if (parts.label) parts.label.textContent = isVideo ? t("videoCallUpper") : t("audioCallUpper");
 
-    const peerDisplay = peer?.login ?? peer?.phone ?? t("subscriber");
+    const currentPeerId = getCallPeerId();
+    const peerDisplay = peer && peer.id === currentPeerId ? peer.login ?? peer.phone : t("subscriber");
     if (parts.peerName) parts.peerName.textContent = peerDisplay;
 
     if (parts.remoteVideo) parts.remoteVideo.style.display = isVideo ? "block" : "none";
@@ -1902,7 +2265,8 @@ export default function App() {
   const syncCallWindowStreams = (localStream?: MediaStream, remoteStream?: MediaStream) => {
     const parts = callWindowPartsRef.current;
     if (!parts) return;
-    if (parts.localVideo && localStream) parts.localVideo.srcObject = localStream;
+    const previewStream = screenShareRef.current?.stream ?? localStream;
+    if (parts.localVideo && previewStream) parts.localVideo.srcObject = previewStream;
     if (parts.remoteVideo && remoteStream) parts.remoteVideo.srcObject = remoteStream;
   };
 
@@ -1937,99 +2301,105 @@ export default function App() {
   };
 
   const createPeerConnection = () =>
-    new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+    new RTCPeerConnection({ iceServers });
 
   const startCall = async (isVideo = false) => {
     if (!peer) return;
+    if (callRef.current.status !== "idle") return;
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       setStatus(t("noConnection")); return;
     }
+    const targetId = peer.id;
+    let pc: RTCPeerConnection | null = null;
+    let localStream: MediaStream | null = null;
     try {
-      const pc = createPeerConnection();
-      pc.onicecandidate = (event) => {
-        if (event.candidate) {
-          wsRef.current?.send(JSON.stringify({
-            type: "call.ice", payload: { to: peer.id, candidate: event.candidate }
-          }));
-        }
-      };
-      pc.ontrack = (event) => {
-        const stream = event.streams[0];
-        if (remoteAudioRef.current) remoteAudioRef.current.srcObject = stream;
-        setCall((prev) => ({ ...prev, remoteStream: stream }));
-      };
-      const localStream = await navigator.mediaDevices.getUserMedia(
+      const nextPc = createPeerConnection();
+      pc = nextPc;
+      configurePeerConnection(nextPc, targetId);
+      const stream = await navigator.mediaDevices.getUserMedia(
         isVideo ? { audio: true, video: true } : { audio: true }
       );
-      localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      wsRef.current.send(JSON.stringify({
-        type: "call.offer", payload: { to: peer.id, offer, isVideo }
-      }));
-      setCall({ status: "calling", pc, localStream, isVideo });
+      localStream = stream;
+      stream.getTracks().forEach((track) => nextPc.addTrack(track, stream));
+      const offer = await nextPc.createOffer();
+      await nextPc.setLocalDescription(offer);
+      sendCallSignal("call.offer", targetId, { offer, isVideo });
+      const nextCall: CallState = { status: "calling", pc: nextPc, localStream: stream, isVideo, peerId: targetId };
+      callRef.current = nextCall;
+      setCall(nextCall);
     } catch (err) {
+      pc?.close();
+      stopStreamTracks(localStream);
       setStatus(t("callStartFailed"));
     }
   };
 
   const acceptCall = async () => {
-    if (!call.offer) return;
+    const pendingCall = callRef.current;
+    if (!pendingCall.offer) return;
     stopTone();
-    let currentPeer = peer;
-    if (!currentPeer && call.callerId) {
-      const fetched = await fetchPeerById(call.callerId);
+    const callerId = pendingCall.peerId ?? pendingCall.callerId;
+    if (!callerId) { setStatus(t("peerMissing")); return; }
+    let currentPeer = peerRef.current?.id === callerId ? peerRef.current : null;
+    if (!currentPeer) {
+      const fetched = await fetchPeerById(callerId);
       if (fetched) { setPeer(fetched); currentPeer = fetched; }
     }
     if (!currentPeer) { setStatus(t("peerMissing")); return; }
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       setStatus(t("noConnection")); return;
     }
+    let pc: RTCPeerConnection | null = null;
+    let localStream: MediaStream | null = null;
     try {
-      const pc = createPeerConnection();
-      pc.onicecandidate = (event) => {
-        if (event.candidate) {
-          wsRef.current?.send(JSON.stringify({
-            type: "call.ice", payload: { to: currentPeer!.id, candidate: event.candidate }
-          }));
-        }
-      };
-      pc.ontrack = (event) => {
-        const stream = event.streams[0];
-        if (remoteAudioRef.current) remoteAudioRef.current.srcObject = stream;
-        setCall((prev) => ({ ...prev, remoteStream: stream }));
-      };
-      const localStream = await navigator.mediaDevices.getUserMedia(
-        call.isVideo ? { audio: true, video: true } : { audio: true }
+      const nextPc = createPeerConnection();
+      pc = nextPc;
+      configurePeerConnection(nextPc, callerId);
+      const stream = await navigator.mediaDevices.getUserMedia(
+        pendingCall.isVideo ? { audio: true, video: true } : { audio: true }
       );
-      localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
-      await pc.setRemoteDescription(call.offer);
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      wsRef.current.send(JSON.stringify({
-        type: "call.answer", payload: { to: currentPeer!.id, answer }
-      }));
-      setCall({ status: "in-call", pc, localStream, isVideo: call.isVideo });
+      localStream = stream;
+      stream.getTracks().forEach((track) => nextPc.addTrack(track, stream));
+      await nextPc.setRemoteDescription(pendingCall.offer);
+      await flushPendingIceCandidates(nextPc, callerId);
+      const answer = await nextPc.createAnswer();
+      await nextPc.setLocalDescription(answer);
+      sendCallSignal("call.answer", callerId, { answer });
+      const nextCall: CallState = {
+        status: "in-call",
+        pc: nextPc,
+        localStream: stream,
+        isVideo: Boolean(pendingCall.isVideo),
+        callerId,
+        peerId: callerId
+      };
+      callRef.current = nextCall;
+      setCall(nextCall);
     } catch (err) {
+      pc?.close();
+      stopStreamTracks(localStream);
       setStatus(t("callAcceptFailed"));
-      endCall();
+      endCall({ notifyPeer: true, peerId: callerId });
     }
   };
 
-  const endCall = () => {
+  const endCall = ({ notifyPeer = true, peerId }: { notifyPeer?: boolean; peerId?: string } = {}) => {
+    const currentCall = callRef.current;
+    const targetId = peerId ?? getCallPeerId(currentCall);
+    if (notifyPeer && targetId) sendCallSignal("call.end", targetId);
     if (screenShareRef.current) {
-      screenShareRef.current.stream.getTracks().forEach((t) => t.stop());
+      stopStreamTracks(screenShareRef.current.stream);
       screenShareRef.current = null;
     }
-    call.pc?.close();
-    call.localStream?.getTracks().forEach((track) => track.stop());
+    currentCall.pc?.close();
+    stopStreamTracks(currentCall.localStream);
+    pendingIceCandidatesRef.current = {};
+    if (remoteAudioRef.current) remoteAudioRef.current.srcObject = null;
     stopTone();
-    const targetId = peer?.id ?? call.callerId;
-    if (targetId && wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: "call.end", payload: { to: targetId } }));
-    }
     closeCallWindow();
-    setCall({ status: "idle" });
+    const idleCall: CallState = { status: "idle" };
+    callRef.current = idleCall;
+    setCall(idleCall);
   };
 
   useEffect(() => {
@@ -2159,6 +2529,17 @@ export default function App() {
             </>
           )}
 
+          <div className="server-url-control">
+            <label>
+              <span>Server URL</span>
+              <input value={serverUrlInput} onChange={(e) => setServerUrlInput(e.target.value)} placeholder="https://mas.example.com" />
+            </label>
+            <div className="server-url-actions">
+              <button type="button" className="auth-secondary" onClick={saveServerUrl}>Save</button>
+              <button type="button" className="auth-secondary" onClick={resetServerUrl}>Default</button>
+            </div>
+          </div>
+
           <div className={`status auth-status ${status ? "" : "empty"}`}>{status || " "}</div>
         </div>
       </div>
@@ -2233,14 +2614,14 @@ export default function App() {
             <p>{call.isVideo ? t("incomingVideoCall") : t("incomingCall")}</p>
             <div className="call-card-btns">
               <button className="call-accept" onClick={acceptCall}>{t("accept")}</button>
-              <button className="call-reject" onClick={endCall}>{t("decline")}</button>
+              <button className="call-reject" onClick={() => endCall()}>{t("decline")}</button>
             </div>
           </div>
         )}
         {call.status === "in-call" && activeTab === "chat" && (
           <div className="call-card">
             <p>{t("activeCall")}</p>
-            <button className="call-reject" onClick={endCall}>{t("end")}</button>
+            <button className="call-reject" onClick={() => endCall()}>{t("end")}</button>
           </div>
         )}
         <audio ref={remoteAudioRef} autoPlay />
@@ -2306,16 +2687,21 @@ export default function App() {
                   <button className="ghost" onClick={() => { setChatSearchOpen(false); setChatSearch(""); }}>✕</button>
                 </div>
               )}
-              {messages.some((m) => m.pinned) && (
+              {visibleMessages.some((m) => m.pinned) && (
                 <div className="pinned-bar" onClick={() => {
-                  const pinned = messages.find((m) => m.pinned);
+                  const pinned = visibleMessages.find((m) => m.pinned);
                   if (pinned) { const el = document.getElementById(`msg-${pinned.id}`); el?.scrollIntoView({ behavior: "smooth" }); }
                 }}>
-                  📌 {messages.filter((m) => m.pinned).length} {t("pinnedMessage")}
+                  📌 {visibleMessages.filter((m) => m.pinned).length} {t("pinnedMessage")}
                 </div>
               )}
               <div className="messages">
-                {(chatSearch ? filteredMessages : messages).map((msg, idx, arr) => {
+                {hiddenDecryptFailedCount > 0 && (
+                  <div className="date-separator">
+                    <span>{hiddenDecryptFailedCount} old message(s) cannot be decrypted on this device.</span>
+                  </div>
+                )}
+                {(chatSearch ? filteredMessages : visibleMessages).map((msg, idx, arr) => {
                   const prev = arr[idx - 1];
                   const showDate = !prev || formatDate(prev.createdAt, language) !== formatDate(msg.createdAt, language);
                   const replyMsg = msg.replyToId ? messages.find((m) => m.id === msg.replyToId) : null;
@@ -2471,6 +2857,17 @@ export default function App() {
                     ))}
                   </select>
                 </label>
+                <label className="settings-row column">
+                  <span>Server URL</span>
+                  <input value={serverUrlInput} onChange={(e) => setServerUrlInput(e.target.value)} placeholder="https://mas.example.com" />
+                </label>
+                <div className="settings-row">
+                  <span className="muted">{API_URL}</span>
+                  <div className="server-url-actions">
+                    <button className="ghost" onClick={saveServerUrl}>Save</button>
+                    <button className="ghost" onClick={resetServerUrl}>Default</button>
+                  </div>
+                </div>
               </section>
               <section className="settings-section">
                 <h3>{t("account")}</h3>

@@ -17,6 +17,6 @@
 - **No external dependencies:** No databases, Docker, or third-party services are required. The server uses an embedded SQLite file (`data/mas.db`).
 - **Typecheck:** `npm run typecheck` passes cleanly across all workspaces.
 - **Build:** `npm run build:web` succeeds cleanly.
-- **Web client hardcodes** `API_URL = "http://localhost:4000"` and `WS_URL = "ws://localhost:4000"` in `apps/web/src/App.tsx`. Start the server before the web client.
-- **WebSocket + StrictMode bug:** `React.StrictMode` in `apps/web/src/main.tsx` causes the WebSocket `useEffect` (in `App.tsx`) to double-mount, creating a race: the stale socket's `close` event fires `clients.delete(userId)` on the server after the new socket has already registered, making the user appear offline. This blocks incoming call delivery and real-time presence in dev mode.
-- **Call testing in VM:** `startCall`/`acceptCall` call `navigator.mediaDevices.getUserMedia()` without try/catch. In headless/VM environments without audio/video hardware, calls fail silently. Server-side call signaling (offer/answer/ICE/end relay) can be tested programmatically via WebSocket clients.
+- **Client API URL:** Web and desktop default to `VITE_API_URL` or `http://localhost:4000`, and users can override it in app settings via `mas.apiUrl`. WebSocket URLs are derived from the API URL unless `VITE_WS_URL` is set.
+- **Public server setup:** For port-forwarded deployments, keep the Node server on `HOST=127.0.0.1` and expose only Caddy on `80/443`. See `docs/public-server.md`.
+- **Call testing in VM:** Calls use `navigator.mediaDevices.getUserMedia()` and configurable ICE servers from `GET /config/ice`. In headless/VM environments without audio/video hardware, media calls can still fail; server-side call signaling can be tested programmatically via WebSocket clients.

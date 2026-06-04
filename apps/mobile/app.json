@@ -12,9 +12,27 @@
     "android": {
       "package": "com.mas.secure",
       "permissions": [
-        "CAMERA"
+        "CAMERA",
+        "RECORD_AUDIO",
+        "INTERNET",
+        "ACCESS_NETWORK_STATE",
+        "CHANGE_NETWORK_STATE",
+        "MODIFY_AUDIO_SETTINGS",
+        "BLUETOOTH",
+        "BLUETOOTH_ADMIN",
+        "BLUETOOTH_CONNECT"
       ],
       "usesCleartextTraffic": true
-    }
+    },
+    "plugins": [
+      "expo-sharing",
+      [
+        "@config-plugins/react-native-webrtc",
+        {
+          "cameraPermission": "Allow MAS Secure to access your camera for video calls.",
+          "microphonePermission": "Allow MAS Secure to access your microphone for calls."
+        }
+      ]
+    ]
   }
 }

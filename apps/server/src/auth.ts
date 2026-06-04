@@ -5,11 +5,16 @@ import { db, UserRecord } from "./store.js";
 const isProduction = process.env.NODE_ENV === "production";
 const JWT_SECRET = process.env.JWT_SECRET;
 const DEV_JWT_SECRET = "dev-secret";
+const devAuthCodesEnabled = process.env.DEV_AUTH_CODES === "true" || (!isProduction && process.env.DEV_AUTH_CODES !== "false");
+const smsProviderConfigured = false;
 if (isProduction && !JWT_SECRET) {
   throw new Error("JWT_SECRET is required when NODE_ENV=production");
 }
 if (!isProduction && !JWT_SECRET) {
   console.warn("[auth] JWT_SECRET is not set; using an insecure development fallback.");
+}
+if (devAuthCodesEnabled) {
+  console.warn("[auth] DEV_AUTH_CODES is enabled; SMS auth codes will be returned in API responses.");
 }
 
 const codeTTL = 5 * 60 * 1000;
@@ -32,6 +37,10 @@ setInterval(() => {
 }, 60_000);
 
 export const requestSmsCode = (phone: string) => {
+  if (!devAuthCodesEnabled && !smsProviderConfigured) {
+    return { ok: false as const, error: "sms_not_configured" as const };
+  }
+
   const code = crypto.randomInt(100000, 1000000).toString();
   pendingCodes.set(phone, {
     phone,
@@ -40,7 +49,7 @@ export const requestSmsCode = (phone: string) => {
     attempts: 0
   });
 
-  return isProduction ? {} : { code };
+  return devAuthCodesEnabled ? { ok: true as const, code } : { ok: true as const };
 };
 
 export const issueAuthToken = (user: UserRecord) =>

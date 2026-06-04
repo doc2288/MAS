@@ -407,7 +407,7 @@ const stmts = {
     `UPDATE messages SET deliveredAt = COALESCE(@deliveredAt, deliveredAt), readAt = COALESCE(@readAt, readAt) WHERE id = @id`
   ),
   editMessage: sqlite.prepare(`
-    UPDATE messages SET ciphertext=@ciphertext, nonce=@nonce, selfCiphertext=@selfCiphertext,
+    UPDATE messages SET body=@body, ciphertext=@ciphertext, nonce=@nonce, selfCiphertext=@selfCiphertext,
       selfNonce=@selfNonce, senderPublicKey=@senderPublicKey, editedAt=@editedAt
     WHERE id = @id AND "from" = @userId AND "to" = @peerId
   `),
@@ -805,6 +805,7 @@ export const db = {
       id,
       userId,
       peerId,
+      body: patch.body ?? null,
       ciphertext: patch.ciphertext ?? null,
       nonce: patch.nonce ?? null,
       selfCiphertext: patch.selfCiphertext ?? null,

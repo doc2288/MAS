@@ -1,6 +1,7 @@
 import { WebSocket, WebSocketServer } from "ws";
 import { verifyToken } from "./auth.js";
 import { db, MessageRecord } from "./store.js";
+import { CHAT_MODE } from "./config.js";
 
 export type SocketClient = {
   userId: string;
@@ -88,6 +89,9 @@ const isSafeId = (value: unknown): value is string => isBoundedString(value, 128
 
 const optionalString = (value: unknown, max: number): string | undefined =>
   isBoundedString(value, max) ? value : undefined;
+
+const optionalBodyString = (value: unknown, max: number): string | undefined =>
+  typeof value === "string" && value.length <= max ? value : undefined;
 
 const parseCreatedAt = (value: unknown) => {
   if (typeof value !== "string" || value.length > 64 || Number.isNaN(Date.parse(value))) {
@@ -213,7 +217,10 @@ export const attachWebSocket = (server: import("http").Server) => {
           const selfNonce = optionalString(payload.selfNonce, 512);
           const selfCiphertext = optionalString(payload.selfCiphertext, 262_144);
           const senderPublicKey = optionalString(payload.senderPublicKey, 512);
-          if (!nonce || !ciphertext || !selfNonce || !selfCiphertext || !senderPublicKey) {
+          const body = optionalBodyString(payload.body, 262_144);
+          const hasEncryptedPayload = Boolean(nonce && ciphertext && selfNonce && selfCiphertext && senderPublicKey);
+          const hasCloudPayload = CHAT_MODE === "cloud" && body !== undefined;
+          if (!hasCloudPayload && !hasEncryptedPayload) {
             sendError(socket, "message_encryption_required");
             return;
           }
@@ -247,11 +254,8 @@ export const attachWebSocket = (server: import("http").Server) => {
             to,
             createdAt: parseCreatedAt(payload.createdAt),
             contentType: contentType as MessageRecord["contentType"],
-            nonce,
-            ciphertext,
-            selfNonce,
-            selfCiphertext,
-            senderPublicKey,
+            ...(hasCloudPayload ? { body } : {}),
+            ...(hasEncryptedPayload ? { nonce, ciphertext, selfNonce, selfCiphertext, senderPublicKey } : {}),
             ...(deliveredAt ? { deliveredAt } : {}),
             ...(replyToId ? { replyToId } : {}),
             ...(meta ? { meta } : {})
@@ -299,14 +303,13 @@ export const attachWebSocket = (server: import("http").Server) => {
           const selfNonce = optionalString(payload.selfNonce, 512);
           const selfCiphertext = optionalString(payload.selfCiphertext, 262_144);
           const senderPublicKey = optionalString(payload.senderPublicKey, 512);
-          if (!nonce || !ciphertext || !selfNonce || !selfCiphertext || !senderPublicKey) return;
-          const updated = db.editMessage(id, userId, peerId, {
-            ciphertext,
-            nonce,
-            selfCiphertext,
-            selfNonce,
-            senderPublicKey
-          });
+          const body = optionalBodyString(payload.body, 262_144);
+          const hasEncryptedPayload = Boolean(nonce && ciphertext && selfNonce && selfCiphertext && senderPublicKey);
+          const hasCloudPayload = CHAT_MODE === "cloud" && body !== undefined;
+          if (!hasCloudPayload && !hasEncryptedPayload) return;
+          const updated = db.editMessage(id, userId, peerId, hasCloudPayload
+            ? { body, ciphertext: undefined, nonce: undefined, selfCiphertext: undefined, selfNonce: undefined, senderPublicKey: undefined }
+            : { ciphertext, nonce, selfCiphertext, selfNonce, senderPublicKey });
           if (updated) {
             const out = JSON.stringify({ type: "message.edited", payload: updated });
             sendToUser(peerId, JSON.parse(out) as ServerEvent);
@@ -343,6 +346,7 @@ export const attachWebSocket = (server: import("http").Server) => {
         }
 
         if (type === "call.offer" || type === "call.answer" || type === "call.ice" || type === "call.end") {
+          if (!isRecord(payload)) return;
           const to = payload.to;
           if (!isSafeId(to) || !db.findUserById(to)) return;
           sendToUser(to, { type, payload: { ...payload, from: userId } });

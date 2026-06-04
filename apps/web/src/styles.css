@@ -934,6 +934,26 @@ button:active { transform: scale(0.98); }
   background: var(--bg-primary);
 }
 
+.server-url-control {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.server-url-control label {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.server-url-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .settings-row .language-select {
   width: 170px;
 }
